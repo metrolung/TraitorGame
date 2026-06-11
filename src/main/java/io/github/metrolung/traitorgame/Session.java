@@ -7,14 +7,13 @@ import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
 import net.kyori.adventure.title.TitlePart;
+import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Server;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.jetbrains.annotations.NotNull;
 
@@ -22,21 +21,28 @@ import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.*;
 
-public class Session implements Listener {
+public class Session {
     private final Server server;
     private final SessionManager sessionManager;
     private final Plugin plugin;
-    private final Map<OfflinePlayer, SessionPlayer> players;
+    private final Map<Player, SessionPlayer> players;
 
-    private final Random random = new Random();
+    private final SessionConfigs configs;
+    private int meetingCooldown;
+    private @Nullable ArmorStand bellLabel;
+    private @Nullable Meeting activeMeeting;
 
-
-    public Session(Server server, Plugin plugin, SessionManager sessionManager, int traitorCount) {
-        Map<OfflinePlayer, SessionPlayer> players = new HashMap<>();
+    public Session(
+        Server server,
+        Plugin plugin,
+        SessionManager sessionManager,
+        SessionConfigs configs
+    ) {
+        Map<Player, SessionPlayer> players = new HashMap<>();
 
         List<Role> roles = Arrays.asList(new Role[server.getOnlinePlayers().size()]);
         Collections.fill(roles, Role.Innocent);
-        for (int i = 0; i < traitorCount; i++) {
+        for (int i = 0; i < configs.traitorCount(); i++) {
             if (i >= roles.size()) {
                 break;
             }
@@ -54,13 +60,25 @@ public class Session implements Listener {
             roleIdx++;
         }
 
+        this.bellLabel = null;
         this.server = server;
         this.plugin = plugin;
         this.sessionManager = sessionManager;
         this.players = players;
+        this.configs = configs;
     }
 
     public void onSessionStart() {
+        var blockData = server.createBlockData(Material.BELL);
+        configs.bellLocation().getWorld().setBlockData(configs.bellLocation(), blockData);
+
+        this.bellLabel = configs.bellLocation().getWorld().createEntity(configs.bellLocation().add(0, 2, 0), ArmorStand.class);
+        bellLabel.setInvisible(true);
+        bellLabel.teleport(configs.bellLocation());
+        bellLabel.setAI(false);
+        bellLabel.setCustomNameVisible(true);
+        bellLabel.customName(Component.text("Initiate Meeting"));
+
         for (SessionPlayer player : players.values()) {
             if (!(player.player instanceof Player onlinePlayer)) {
                 continue;
@@ -118,18 +136,112 @@ public class Session implements Listener {
         }
     }
 
-    public void onSessionEnd() {
-        displayRoles();
+    private void startMeeting() {
+        this.meetingCooldown = configs.meetingCooldown();
+        this.activeMeeting = new Meeting(this, configs.discussionTime(), configs.votingTime());
+        this.activeMeeting.startMeeting();
     }
 
-    @EventHandler
-    private void onPlayerDeath(PlayerDeathEvent death) {
-        if (players.containsKey(death.getPlayer())) {
-            players.get(death.getPlayer()).alive = false;
+    public void onSessionEnd() {
+        var blockData = server.createBlockData(Material.AIR);
+        configs.bellLocation().getWorld().setBlockData(configs.bellLocation(), blockData);
+        displayRoles();
+
+        if (bellLabel != null) {
+            bellLabel.remove();
+            bellLabel = null;
         }
     }
 
-    public @Nullable Role getRole(OfflinePlayer player) {
+    public void onServerTicked() {
+        if (activeMeeting != null) {
+            activeMeeting.onServerTicked();
+            if (activeMeeting.state == Meeting.MeetingState.Finished) {
+                activeMeeting = null;
+            }
+        } else {
+            if (meetingCooldown > 0) {
+                meetingCooldown--;
+            }
+        }
+    }
+
+    public void onPlayerDeath(Player player) {
+        if (players.containsKey(player)) {
+            players.get(player).alive = false;
+        }
+    }
+
+    public void onPlayerInteractWithBlock(Player player, Location block) {
+        boolean playerIsAlive = players.containsKey(player) && players.get(player).alive;
+        boolean targetIsBell = block.equals(configs.bellLocation());
+        boolean meetingNotOnCooldown = meetingCooldown <= 0;
+        if (playerIsAlive && targetIsBell && meetingNotOnCooldown) {
+            startMeeting();
+        }
+    }
+
+    public boolean onBlockRemoved(Location blockLocation) {
+        return blockLocation.equals(configs.bellLocation());
+    }
+
+    public Component onSkip(Player voter) {
+        if (activeMeeting == null) {
+            return Component.text("There is no meeting active");
+        }
+
+        boolean playerIsAlive = players.containsKey(voter) && players.get(voter).alive;
+
+        if (!playerIsAlive) {
+            return Component.text("You are not alive");
+        }
+
+        return activeMeeting.onSkip(voter);
+    }
+
+    public Component onVoteEndGame(Player voter) {
+        if (activeMeeting == null) {
+            return Component.text("There is no meeting active");
+        }
+
+        boolean playerIsAlive = players.containsKey(voter) && players.get(voter).alive;
+
+        if (!playerIsAlive) {
+            return Component.text("You are not alive");
+        }
+
+        return activeMeeting.onVoteEndGame(voter);
+    }
+
+    public Component onVote(Player voter, String name) {
+        if (activeMeeting == null) {
+            return Component.text("There is no meeting active");
+        }
+
+        boolean playerIsAlive = players.containsKey(voter) && players.get(voter).alive;
+
+        if (!playerIsAlive) {
+            return Component.text("You are not alive");
+        }
+
+        Player voted = null;
+
+        for (Player target : players.keySet()) {
+            boolean targetIsAlive = players.containsKey(target) && players.get(target).alive;
+            if (targetIsAlive && target.getName().equalsIgnoreCase(name)) {
+                voted = target;
+                break;
+            }
+        }
+
+        if (voted == null) {
+            return Component.text("Target is not alive");
+        }
+
+        return activeMeeting.onVote(voter, voted);
+    }
+
+    public @Nullable Role getRole(Player player) {
         SessionPlayer sessionPlayer = this.players.get(player);
         if (sessionPlayer == null)
             return null;
@@ -174,12 +286,172 @@ public class Session implements Listener {
     private static class SessionPlayer {
         private final @NotNull OfflinePlayer player;
         private boolean alive;
-        private @NotNull Role role;
+        private final @NotNull Role role;
 
         private SessionPlayer(@NotNull OfflinePlayer player, boolean alive, @NotNull Role role) {
             this.player = player;
             this.alive = alive;
             this.role = role;
+        }
+    }
+
+
+    private static class Meeting {
+        private final Session session;
+        private final Server server;
+        private MeetingState state;
+        private int discussionTicks;
+        private int votingTicks;
+
+        private final Map<OfflinePlayer, Vote> votes;
+
+        private Meeting(Session session, int discussionTicks, int votingTicks) {
+            this.session = session;
+            this.server = session.server;
+            this.state = MeetingState.Uninit;
+            this.discussionTicks = discussionTicks;
+            this.votingTicks = votingTicks;
+            this.votes = new HashMap<>();
+        }
+
+        private void startMeeting() {
+            server.sendTitlePart(TitlePart.TIMES, Title.Times.times(Duration.ZERO, Duration.ofSeconds(2), Duration.ofMillis(500)));
+            server.sendTitlePart(TitlePart.TITLE, Component.text("MEETING!").color(TextColor.color(255, 0, 0)));
+            startDiscussion();
+        }
+
+        private void startDiscussion() {
+            this.state = MeetingState.Discussion;
+            server.sendMessage(Component.text("Discussion started"));
+        }
+
+        private void startVoting() {
+            this.state = MeetingState.Voting;
+            server.sendMessage(Component.text("Voting started"));
+        }
+
+        private void endMeeting() {
+            this.state = MeetingState.Finished;
+
+            Map<Vote, Integer> voteCounts = new HashMap<>();
+
+            for (Vote vote : votes.values()) {
+                voteCounts.put(vote, voteCounts.getOrDefault(vote, 0) + 1);
+            }
+
+            Vote highestVote = null;
+            int highestVoteCount = 0;
+            boolean tied = true;
+
+            for (Map.Entry<Vote, Integer> entry : voteCounts.entrySet()) {
+                if (highestVote == null) {
+                    highestVote = entry.getKey();
+                    highestVoteCount = entry.getValue();
+                    tied = false;
+                } else if (entry.getValue() > highestVoteCount) {
+                    tied = false;
+                    highestVote = entry.getKey();
+                    highestVoteCount = entry.getValue();
+                } else if (entry.getValue() == highestVoteCount) {
+                    tied = true;
+                }
+            }
+
+            if (tied) {
+                server.sendMessage(Component.text("Vote tied (skip)"));
+                return;
+            }
+            switch (highestVote) {
+                case Vote.EndGame endGame -> {
+                    server.sendMessage(Component.text("Session voted to end"));
+                    session.sessionManager.endSession(session);
+                }
+                case Vote.PlayerVote playerVote -> {
+                    playerVote.player().kill();
+                }
+                case Vote.Skip skip -> {
+                    server.sendMessage(Component.text("Meeting skipped"));
+                }
+            }
+        }
+
+        private Component onVote(Player voter, Player voted) {
+            if (votes.containsKey(voter)) {
+                return Component.text("You've already voted");
+            }
+
+            votes.put(voter, new Vote.PlayerVote(voted));
+
+            return Component
+                .text("Your vote for ")
+                .append(Component.text(Objects.requireNonNull(voted.getName())))
+                .append(Component.text(" has been cast"));
+        }
+
+        private Component onSkip(Player voter) {
+            if (votes.containsKey(voter)) {
+                return Component.text("You've already voted");
+            }
+
+            votes.put(voter, new Vote.Skip());
+
+            return Component.text("You have skipped");
+        }
+
+        private Component onVoteEndGame(Player voter) {
+            if (votes.containsKey(voter)) {
+                return Component.text("You've already voted");
+            }
+
+            votes.put(voter, new Vote.EndGame());
+
+            return Component.text("You have skipped");
+        }
+
+        private void onServerTicked() {
+            switch (state) {
+                case Discussion -> {
+                    discussionTicks--;
+
+                    server.sendActionBar(Component
+                        .text("Voting starts in ")
+                        .append(Component.text(((discussionTicks - 1) / 20) + 1))
+                        .append(Component.text(" seconds"))
+                        .color(TextColor.color(0, 200,  200))
+                    );
+
+                    if (discussionTicks <= 0) {
+                        this.startVoting();
+                    }
+                }
+                case Voting -> {
+                    votingTicks--;
+
+                    server.sendActionBar(Component
+                        .text("Voting ends in ")
+                        .append(Component.text(((votingTicks - 1) / 20) + 1))
+                        .append(Component.text(" seconds"))
+                        .color(TextColor.color(0, 200,  200))
+                    );
+
+                    if (votingTicks <= 0) {
+                        this.endMeeting();
+                    }
+                }
+            }
+        }
+
+        private enum MeetingState {
+            Uninit,
+            Discussion,
+            Voting,
+            Finished
+        }
+
+        private sealed interface Vote {
+            record PlayerVote(Player player) implements Vote {}
+            record Skip() implements Vote {}
+            record EndGame() implements Vote {}
         }
     }
 }

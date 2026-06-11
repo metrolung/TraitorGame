@@ -39,7 +39,13 @@ public class TraitorGameCommand {
 
         int traitorCount = ctx.getArgument("traitorcount", int.class);
 
-        plugin.getSessionManager().startSession(plugin.getServer(), plugin, traitorCount);
+        plugin.getSessionManager().startSession(plugin.getServer(), plugin, new SessionConfigs(
+                20*60*5,
+                20*30,
+                20*60,
+                traitorCount,
+                ctx.getSource().getLocation()
+        ));
 
         return Command.SINGLE_SUCCESS;
     }

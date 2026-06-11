@@ -33,6 +33,10 @@ public class RoleCommand {
             return Command.SINGLE_SUCCESS;
         }
 
+        if (plugin.getSessionManager().getSession() == null) {
+            return Command.SINGLE_SUCCESS;
+        }
+
         Session.Role role = plugin.getSessionManager().getSession().getRole(player);
         if (role == null) {
             ctx.getSource().getSender().sendPlainMessage("%s has no role".formatted(player.name()));
@@ -50,6 +54,10 @@ public class RoleCommand {
 
     private int executeRoleOther(CommandContext<CommandSourceStack> ctx) {
         Player player = ctx.getArgument("player", Player.class);
+
+        if (plugin.getSessionManager().getSession() == null) {
+            return Command.SINGLE_SUCCESS;
+        }
 
         Session.Role role = plugin.getSessionManager().getSession().getRole(player);
         if (role == null) {

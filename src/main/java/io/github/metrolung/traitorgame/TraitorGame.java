@@ -15,6 +15,8 @@ public final class TraitorGame extends JavaPlugin {
             commands.registrar().register(new TraitorGameCommand(this).create().build());
             commands.registrar().register(new RoleCommand(this).create().build());
         });
+
+        getServer().getPluginManager().registerEvents(sessionManager, this);
     }
 
     @Override
