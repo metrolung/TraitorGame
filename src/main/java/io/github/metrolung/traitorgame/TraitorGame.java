@@ -14,6 +14,7 @@ public final class TraitorGame extends JavaPlugin {
         this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, commands -> {
             commands.registrar().register(new TraitorGameCommand(this).create().build());
             commands.registrar().register(new RoleCommand(this).create().build());
+            commands.registrar().register(new VoteCommand(this).create().build());
         });
 
         getServer().getPluginManager().registerEvents(sessionManager, this);

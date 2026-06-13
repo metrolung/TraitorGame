@@ -6,7 +6,6 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
-import io.github.metrolung.traitorgame.TraitorGame;
 
 public class TraitorGameCommand {
     private final TraitorGame plugin;
@@ -64,7 +63,7 @@ public class TraitorGameCommand {
             return Command.SINGLE_SUCCESS;
         }
 
-        oldSession.displayRoles();
+        oldSession.endGameText();
 
         return Command.SINGLE_SUCCESS;
     }

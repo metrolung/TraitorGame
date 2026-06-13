@@ -23,9 +23,12 @@ public class VoteCommand {
     }
 
     public LiteralArgumentBuilder<CommandSourceStack> create() {
-        return Commands.literal("role")
+        return Commands.literal("vote")
             .then(Commands.literal("skip")
                 .executes(this::executeSkip)
+            )
+            .then(Commands.literal("end")
+                .executes(this::executeVoteEnd)
             )
             .then(Commands.argument("player", StringArgumentType.word())
                 .executes(this::executeVote)
@@ -62,6 +65,22 @@ public class VoteCommand {
         }
 
         ctx.getSource().getSender().sendMessage(plugin.getSessionManager().getSession().onSkip(player));
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int executeVoteEnd(CommandContext<CommandSourceStack> ctx) {
+        if (!(ctx.getSource().getExecutor() instanceof Player player)) {
+            ctx.getSource().getSender().sendMessage("Only players can vote");
+            return Command.SINGLE_SUCCESS;
+        }
+
+        if (plugin.getSessionManager().getSession() == null) {
+            ctx.getSource().getSender().sendMessage("No active session");
+            return Command.SINGLE_SUCCESS;
+        }
+
+        ctx.getSource().getSender().sendMessage(plugin.getSessionManager().getSession().onVoteEndGame(player));
 
         return Command.SINGLE_SUCCESS;
     }

@@ -2,7 +2,6 @@ package io.github.metrolung.traitorgame;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
-import net.kyori.adventure.text.format.ShadowColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
@@ -25,7 +24,8 @@ public class Session {
     private final Server server;
     private final SessionManager sessionManager;
     private final Plugin plugin;
-    private final Map<Player, SessionPlayer> players;
+    private final Map<UUID, SessionPlayer> livingPlayers;
+    private final Map<UUID, SessionPlayer> deadPlayers;
 
     private final SessionConfigs configs;
     private int meetingCooldown;
@@ -38,24 +38,29 @@ public class Session {
         SessionManager sessionManager,
         SessionConfigs configs
     ) {
-        Map<Player, SessionPlayer> players = new HashMap<>();
+        Map<UUID, SessionPlayer> players = new HashMap<>();
 
         List<Role> roles = Arrays.asList(new Role[server.getOnlinePlayers().size()]);
-        Collections.fill(roles, Role.Innocent);
+        Collections.fill(roles, new Role.Survivor());
         for (int i = 0; i < configs.traitorCount(); i++) {
             if (i >= roles.size()) {
                 break;
             }
 
-            roles.set(i, Role.Traitor);
+            roles.set(i, new Role.Traitor());
         }
 
         Collections.shuffle(roles);
 
         int roleIdx = 0;
         for (Player player : server.getOnlinePlayers()) {
-            var sessionPlayer = new SessionPlayer(player, true, roles.get(roleIdx));
-            players.put(player, sessionPlayer);
+            var sessionPlayer = new SessionPlayer(
+                player.getUniqueId(),
+                player.getName(),
+                roles.get(roleIdx),
+                server
+            );
+            players.put(player.getUniqueId(), sessionPlayer);
 
             roleIdx++;
         }
@@ -64,7 +69,8 @@ public class Session {
         this.server = server;
         this.plugin = plugin;
         this.sessionManager = sessionManager;
-        this.players = players;
+        this.livingPlayers = players;
+        this.deadPlayers = new HashMap<>();
         this.configs = configs;
     }
 
@@ -79,8 +85,10 @@ public class Session {
         bellLabel.setCustomNameVisible(true);
         bellLabel.customName(Component.text("Initiate Meeting"));
 
-        for (SessionPlayer player : players.values()) {
-            if (!(player.player instanceof Player onlinePlayer)) {
+        for (SessionPlayer player : livingPlayers.values()) {
+            Player onlinePlayer = player.getPlayer();
+
+            if (onlinePlayer == null) {
                 continue;
             }
 
@@ -136,6 +144,20 @@ public class Session {
         }
     }
 
+    private @Nullable RoleGroup determineWinner() {
+        if (livingPlayers.isEmpty()) {
+            return null;
+        }
+
+        for (SessionPlayer player : livingPlayers.values()) {
+            if (player.role.getRoleGroup() instanceof RoleGroup.Traitors) {
+                return player.role.getRoleGroup();
+            }
+        }
+
+        return livingPlayers.values().iterator().next().role.getRoleGroup();
+    }
+
     private void startMeeting() {
         this.meetingCooldown = configs.meetingCooldown();
         this.activeMeeting = new Meeting(this, configs.discussionTime(), configs.votingTime());
@@ -145,7 +167,7 @@ public class Session {
     public void onSessionEnd() {
         var blockData = server.createBlockData(Material.AIR);
         configs.bellLocation().getWorld().setBlockData(configs.bellLocation(), blockData);
-        displayRoles();
+        endGameText();
 
         if (bellLabel != null) {
             bellLabel.remove();
@@ -166,17 +188,24 @@ public class Session {
         }
     }
 
+    public boolean isPlayerAlive(Player player) {
+        return isPlayerAlive(player.getUniqueId());
+    }
+
+    public boolean isPlayerAlive(UUID player) {
+        return livingPlayers.containsKey(player);
+    }
+
     public void onPlayerDeath(Player player) {
-        if (players.containsKey(player)) {
-            players.get(player).alive = false;
+        if (livingPlayers.containsKey(player.getUniqueId())) {
+            deadPlayers.put(player.getUniqueId(), livingPlayers.remove(player.getUniqueId()));
         }
     }
 
     public void onPlayerInteractWithBlock(Player player, Location block) {
-        boolean playerIsAlive = players.containsKey(player) && players.get(player).alive;
-        boolean targetIsBell = block.equals(configs.bellLocation());
+        boolean targetIsBell = block.equals(configs.bellLocation().toBlockLocation());
         boolean meetingNotOnCooldown = meetingCooldown <= 0;
-        if (playerIsAlive && targetIsBell && meetingNotOnCooldown) {
+        if (isPlayerAlive(player) && targetIsBell && meetingNotOnCooldown) {
             startMeeting();
         }
     }
@@ -190,9 +219,7 @@ public class Session {
             return Component.text("There is no meeting active");
         }
 
-        boolean playerIsAlive = players.containsKey(voter) && players.get(voter).alive;
-
-        if (!playerIsAlive) {
+        if (!isPlayerAlive(voter)) {
             return Component.text("You are not alive");
         }
 
@@ -204,9 +231,7 @@ public class Session {
             return Component.text("There is no meeting active");
         }
 
-        boolean playerIsAlive = players.containsKey(voter) && players.get(voter).alive;
-
-        if (!playerIsAlive) {
+        if (!isPlayerAlive(voter)) {
             return Component.text("You are not alive");
         }
 
@@ -218,18 +243,15 @@ public class Session {
             return Component.text("There is no meeting active");
         }
 
-        boolean playerIsAlive = players.containsKey(voter) && players.get(voter).alive;
-
-        if (!playerIsAlive) {
+        if (!isPlayerAlive(voter)) {
             return Component.text("You are not alive");
         }
 
-        Player voted = null;
+        SessionPlayer voted = null;
 
-        for (Player target : players.keySet()) {
-            boolean targetIsAlive = players.containsKey(target) && players.get(target).alive;
-            if (targetIsAlive && target.getName().equalsIgnoreCase(name)) {
-                voted = target;
+        for (SessionPlayer player : livingPlayers.values()) {
+            if (player.name().equalsIgnoreCase(name)) {
+                voted = player;
                 break;
             }
         }
@@ -242,18 +264,30 @@ public class Session {
     }
 
     public @Nullable Role getRole(Player player) {
-        SessionPlayer sessionPlayer = this.players.get(player);
+        SessionPlayer sessionPlayer = this.livingPlayers.get(player.getUniqueId());
         if (sessionPlayer == null)
             return null;
         return sessionPlayer.role;
     }
 
-    public void displayRoles() {
+    public void endGameText() {
         int i = 0;
-        for (var player : players.values()) {
+
+        var winner = determineWinner();
+        if (winner != null) {
+            server.sendMessage(winner.winMessage());
+        } else {
+            server.sendMessage(Component.text("Draw...").color(TextColor.color(0xFF8E63)));
+        }
+
+        for (var player : livingPlayers.values()) {
+            if (player.getPlayer() == null) {
+                continue;
+            }
+
             server.getScheduler().runTaskLater(plugin, task -> {
                 server.sendMessage(
-                    Component.text(Objects.requireNonNull(player.player.getName())).append(
+                    Component.text(Objects.requireNonNull(player.getPlayer().getName())).append(
                         Component.text(" was a ").append(
                             player.role.getName()
                         )
@@ -265,36 +299,92 @@ public class Session {
         }
     }
 
-    public enum Role {
-        Traitor,
-        Innocent;
+    public sealed interface RoleGroup {
+        @NotNull TextComponent winMessage();
 
-        public @NotNull TextComponent getName() {
-            return switch (this) {
-                case Traitor -> Component
-                    .text("Traitor")
-                    .color(TextColor.color(0x7A1D2E))
-                    .shadowColor(ShadowColor.shadowColor(0x290A13));
-                case Innocent -> Component
+        final class Traitors implements RoleGroup {
+            private Traitors() {}
+            public static final Traitors INSTANCE = new Traitors();
+
+            @Override
+            public @NotNull TextComponent winMessage() {
+                return Component
+                    .text("Traitors win...")
+                    .color(TextColor.color(0x7A1D2E));
+            }
+        }
+
+        final class Survivors implements RoleGroup {
+            private Survivors() {}
+            public static final Survivors INSTANCE = new Survivors();
+
+            @Override
+            public @NotNull TextComponent winMessage() {
+                return Component
+                    .text("Survivors win!")
+                    .color(TextColor.color(0x01FFCC));
+            }
+        }
+    }
+
+    public interface Role {
+        @NotNull TextComponent getName();
+        @NotNull RoleGroup getRoleGroup();
+
+        final class Traitor implements Role {
+            @Override
+            public @NotNull TextComponent getName() {
+                return Component
+                        .text("Traitor")
+                        .color(TextColor.color(0x7A1D2E));
+            }
+
+            @Override
+            public @NotNull RoleGroup getRoleGroup() {
+                return RoleGroup.Survivors.INSTANCE;
+            }
+        }
+
+        final class Survivor implements Role {
+            @Override
+            public @NotNull TextComponent getName() {
+                return Component
                     .text("Survivor")
-                    .color(TextColor.color(0x1FFCC))
-                    .shadowColor(ShadowColor.shadowColor(0xFFFFFF));
-            };
+                    .color(TextColor.color(0x01FFCC));
+            }
+
+            @Override
+            public @NotNull RoleGroup getRoleGroup() {
+                return RoleGroup.Survivors.INSTANCE;
+            }
         }
+//        Traitor,
+//        Innocent;
+//
+//        public @NotNull TextComponent getName() {
+//            return switch (this) {
+//                case Traitor -> Component
+//                    .text("Traitor")
+//                    .color(TextColor.color(0x7A1D2E))
+//                    .shadowColor(ShadowColor.shadowColor(0x290A13));
+//                case Innocent -> Component
+//                    .text("Survivor")
+//                    .color(TextColor.color(0x1FFCC))
+//                    .shadowColor(ShadowColor.shadowColor(0xFFFFFF));
+//            };
+//        }
     }
 
-    private static class SessionPlayer {
-        private final @NotNull OfflinePlayer player;
-        private boolean alive;
-        private final @NotNull Role role;
-
-        private SessionPlayer(@NotNull OfflinePlayer player, boolean alive, @NotNull Role role) {
-            this.player = player;
-            this.alive = alive;
-            this.role = role;
+    private record SessionPlayer(
+        @NotNull UUID player,
+        @NotNull String name,
+        @NotNull Role role,
+        @NotNull Server server
+    ) {
+        public @Nullable Player getPlayer() {
+            return server.getPlayer(player);
         }
     }
-
 
     private static class Meeting {
         private final Session session;
@@ -367,7 +457,14 @@ public class Session {
                     session.sessionManager.endSession(session);
                 }
                 case Vote.PlayerVote playerVote -> {
-                    playerVote.player().kill();
+                    if (playerVote.player().getPlayer() != null) {
+                        playerVote.player().getPlayer().kill();
+                    }
+
+                    server.sendMessage(
+                        Component.text(playerVote.player.name)
+                            .append(Component.text(" has been voted out"))
+                    );
                 }
                 case Vote.Skip skip -> {
                     server.sendMessage(Component.text("Meeting skipped"));
@@ -375,7 +472,7 @@ public class Session {
             }
         }
 
-        private Component onVote(Player voter, Player voted) {
+        private Component onVote(Player voter, SessionPlayer voted) {
             if (votes.containsKey(voter)) {
                 return Component.text("You've already voted");
             }
@@ -384,7 +481,7 @@ public class Session {
 
             return Component
                 .text("Your vote for ")
-                .append(Component.text(Objects.requireNonNull(voted.getName())))
+                .append(Component.text(voted.name()))
                 .append(Component.text(" has been cast"));
         }
 
@@ -449,7 +546,7 @@ public class Session {
         }
 
         private sealed interface Vote {
-            record PlayerVote(Player player) implements Vote {}
+            record PlayerVote(SessionPlayer player) implements Vote {}
             record Skip() implements Vote {}
             record EndGame() implements Vote {}
         }
