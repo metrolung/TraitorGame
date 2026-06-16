@@ -1,21 +1,23 @@
 plugins {
-    id("java-library")
+    kotlin("jvm") version "2.4.0"
+    id("com.gradleup.shadow") version "9.4.2"
     id("xyz.jpenilla.run-paper") version "3.0.2"
-    kotlin("jvm")
 }
 
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://repo.opencollab.dev/main/")
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
+    compileOnly("org.geysermc.floodgate:api:2.2.5-SNAPSHOT")
     implementation(kotlin("stdlib-jdk8"))
 }
 
-java {
-    toolchain.languageVersion = JavaLanguageVersion.of(25)
+kotlin {
+    jvmToolchain(25)
 }
 
 tasks {
@@ -34,6 +36,7 @@ tasks {
         }
     }
 }
+
 kotlin {
     jvmToolchain(25)
 }

@@ -1,554 +1,736 @@
-package io.github.metrolung.traitorgame;
+package io.github.metrolung.traitorgame
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.TextComponent;
-import net.kyori.adventure.text.format.TextColor;
-import net.kyori.adventure.text.format.TextDecoration;
-import net.kyori.adventure.title.Title;
-import net.kyori.adventure.title.TitlePart;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.Server;
-import org.bukkit.entity.ArmorStand;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.potion.PotionEffectType;
-import org.jetbrains.annotations.NotNull;
+import io.papermc.paper.entity.LookAnchor
+import io.papermc.paper.event.player.AsyncChatEvent
+import net.kyori.adventure.key.Key
+import net.kyori.adventure.sound.Sound
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.TextComponent
+import net.kyori.adventure.text.format.TextColor
+import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import net.kyori.adventure.title.Title
+import net.kyori.adventure.title.TitlePart
+import org.bukkit.Color
+import org.bukkit.EntityEffect
+import org.bukkit.GameMode
+import org.bukkit.Location
+import org.bukkit.Material
+import org.bukkit.Server
+import org.bukkit.entity.Creeper
+import org.bukkit.entity.Display
+import org.bukkit.entity.EnderDragon
+import org.bukkit.entity.Player
+import org.bukkit.entity.TNTPrimed
+import org.bukkit.entity.TextDisplay
+import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.entity.EntityDamageEvent
+import org.bukkit.event.entity.EntityDeathEvent
+import org.bukkit.event.entity.PlayerDeathEvent
+import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.player.PlayerDropItemEvent
+import org.bukkit.event.player.PlayerSwapHandItemsEvent
+import org.bukkit.plugin.Plugin
+import org.bukkit.potion.PotionEffect
+import org.bukkit.potion.PotionEffectType
+import org.bukkit.util.BlockIterator
+import org.joml.Vector3f
+import java.time.Duration
+import java.util.*
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.sin
+import kotlin.random.Random
+import kotlin.time.Duration.Companion.seconds
 
-import javax.annotation.Nullable;
-import java.time.Duration;
-import java.util.*;
+class Session(
+    val server: Server,
+    val plugin: Plugin,
+    val sessionManager: SessionManager,
+    val settings: SessionSettings
+) {
+    private val mutableAlivePlayers: MutableMap<UUID, SessionPlayer>
+    private var meetingCooldown = settings.meetingCooldownTicks / 2
+    private var bellLabel: TextDisplay
+    private var activeMeeting: Meeting? = null
 
-public class Session {
-    private final Server server;
-    private final SessionManager sessionManager;
-    private final Plugin plugin;
-    private final Map<UUID, SessionPlayer> livingPlayers;
-    private final Map<UUID, SessionPlayer> deadPlayers;
+    val allPlayers: Map<UUID, SessionPlayer>
+    val alivePlayers: Map<UUID, SessionPlayer>
+        get() = mutableAlivePlayers
 
-    private final SessionConfigs configs;
-    private int meetingCooldown;
-    private @Nullable ArmorStand bellLabel;
-    private @Nullable Meeting activeMeeting;
+    init {
+        val players: MutableMap<UUID, SessionPlayer> = mutableMapOf()
 
-    public Session(
-        Server server,
-        Plugin plugin,
-        SessionManager sessionManager,
-        SessionConfigs configs
-    ) {
-        Map<UUID, SessionPlayer> players = new HashMap<>();
+        val roles: List<Role> = List(server.onlinePlayers.size) { i ->
+            if (i < settings.traitorCount) {
+                if (Random.nextDouble() > 0.9)
+                    return@List Role.LuckyTraitor
 
-        List<Role> roles = Arrays.asList(new Role[server.getOnlinePlayers().size()]);
-        Collections.fill(roles, new Role.Survivor());
-        for (int i = 0; i < configs.traitorCount(); i++) {
-            if (i >= roles.size()) {
-                break;
+                return@List Role.Traitor
             }
 
-            roles.set(i, new Role.Traitor());
+            if (i == settings.traitorCount) {
+                return@List Role.Detective
+            }
+
+            if (Random.nextDouble() > 0.9)
+                return@List Role.LuckySurvivor
+
+            return@List Role.Survivor
         }
 
-        Collections.shuffle(roles);
-
-        int roleIdx = 0;
-        for (Player player : server.getOnlinePlayers()) {
-            var sessionPlayer = new SessionPlayer(
-                player.getUniqueId(),
-                player.getName(),
-                roles.get(roleIdx),
-                server
-            );
-            players.put(player.getUniqueId(), sessionPlayer);
-
-            roleIdx++;
+        roles.shuffled().let { roles ->
+            for ((roleIdx, player) in server.onlinePlayers.withIndex()) {
+                val sessionPlayer = SessionPlayer(
+                    player.uniqueId,
+                    player.name,
+                    roles[roleIdx],
+                    server
+                )
+                players[player.uniqueId] = sessionPlayer
+            }
         }
 
-        this.bellLabel = null;
-        this.server = server;
-        this.plugin = plugin;
-        this.sessionManager = sessionManager;
-        this.livingPlayers = players;
-        this.deadPlayers = new HashMap<>();
-        this.configs = configs;
+        this.mutableAlivePlayers = players
+        this.allPlayers = players.toMap()
+        this.bellLabel = settings.bellLocation.getWorld()
+            .createEntity(settings.bellLocation, TextDisplay::class.java)
     }
 
-    public void onSessionStart() {
-        var blockData = server.createBlockData(Material.BELL);
-        configs.bellLocation().getWorld().setBlockData(configs.bellLocation(), blockData);
+    fun sendBack(player: UUID): TextComponent {
+        val sessionPlayer = getSessionPlayer(player) ?: return Component.text("You are not alive")
+        val locationPreMeeting = sessionPlayer.returnLocation ?: return Component.text("Nowhere to return to")
 
-        this.bellLabel = configs.bellLocation().getWorld().createEntity(configs.bellLocation().add(0, 2, 0), ArmorStand.class);
-        bellLabel.setInvisible(true);
-        bellLabel.teleport(configs.bellLocation());
-        bellLabel.setAI(false);
-        bellLabel.setCustomNameVisible(true);
-        bellLabel.customName(Component.text("Initiate Meeting"));
+        if (!sessionPlayer.canReturn) {
+            return Component.text("You may not return at this time")
+        }
 
-        for (SessionPlayer player : livingPlayers.values()) {
-            Player onlinePlayer = player.getPlayer();
+        if (!isPlayerAlive(sessionPlayer)) {
+            return Component.text("You are not alive")
+        }
 
-            if (onlinePlayer == null) {
-                continue;
+        sessionPlayer.player?.teleport(locationPreMeeting)
+        sessionPlayer.player?.playSound(Sound.sound {
+            it.source(Sound.Source.PLAYER)
+            it.type(Key.key("minecraft:entity.player.teleport"))
+        })
+
+        sessionPlayer.returnLocation = null
+        return Component.text("Teleported")
+    }
+
+    fun gracePeriod() {
+        for (player in alivePlayers.values) {
+            player.player?.addPotionEffect(PotionEffect(PotionEffectType.RESISTANCE, 20*30, 255, false, false, true))
+        }
+    }
+
+    fun playerNearBell(player: Player): Boolean {
+        val center = settings.bellLocation.toCenterLocation()
+
+        return player.world.key == center.world.key && player.location.distanceSquared(center) < 6*6
+    }
+
+    fun gatherAroundBell() {
+        val center = settings.bellLocation.toCenterLocation()
+        val spectatorLocation = center.add(0.0, 2.0, 0.0)
+        for (player in server.onlinePlayers) {
+            if (playerNearBell(player)) {
+                continue
             }
 
-            onlinePlayer.sendTitlePart(
+            if (player.gameMode == GameMode.SPECTATOR) {
+                player.teleport(spectatorLocation)
+                continue
+            }
+
+            val angle = Random.nextDouble(-Math.PI, Math.PI)
+            player.teleport(center)
+
+            val offset = center.add(cos(angle)*4, 0.0, sin(angle)*4)
+            val offsetY = offset.world.getHighestBlockYAt(offset) + 1
+            offset.y = offsetY.toDouble()
+            player.teleport(offset)
+            player.lookAt(bellLabel, LookAnchor.EYES, LookAnchor.FEET)
+        }
+    }
+
+    fun onSessionStart() {
+        val blockData = server.createBlockData(Material.BELL)
+        settings.bellLocation.getWorld().setBlockData(settings.bellLocation, blockData)
+
+        val labelLocation = settings.bellLocation.toCenterLocation().add(0.0, 1.0, 0.0)
+        this.bellLabel.billboard = Display.Billboard.CENTER
+        this.bellLabel.isSeeThrough = true
+        this.bellLabel.viewRange = Float.MAX_VALUE
+        this.bellLabel.lineWidth = 150
+        this.bellLabel.spawnAt(labelLocation)
+
+        gatherAroundBell()
+        gracePeriod()
+
+        for (sessionPlayer in this.alivePlayers.values) {
+            val player = sessionPlayer.player ?: continue
+
+            player.resetStats()
+
+            if (player.gameMode == GameMode.SPECTATOR)
+                player.gameMode = GameMode.SURVIVAL
+
+            for ((idx, equipment) in sessionPlayer.role.equipment) {
+                player.inventory.setItem(idx, equipment)
+            }
+
+            player.sendTitlePart(
                 TitlePart.TIMES,
                 Title.Times.times(
                     Duration.ofSeconds(0),
                     Duration.ofSeconds(10),
                     Duration.ofSeconds(0)
                 )
-            );
+            )
 
-            onlinePlayer.sendTitlePart(
+            player.sendTitlePart(
                 TitlePart.TITLE,
                 Component.text("")
-            );
+            )
 
-            onlinePlayer.sendTitlePart(
+            player.sendTitlePart(
                 TitlePart.SUBTITLE,
                 Component.text("You are...")
-            );
+            )
 
-            server.getScheduler().runTaskLater(plugin, task -> {
-                onlinePlayer.sendTitlePart(
+            server.scheduler.runTaskLater(plugin, { _ ->
+                player.sendTitlePart(
                     TitlePart.TIMES,
                     Title.Times.times(
                         Duration.ofSeconds(0),
                         Duration.ofSeconds(2),
                         Duration.ofSeconds(1)
                     )
-                );
+                )
+                player.addPotionEffect(PotionEffect(PotionEffectType.BLINDNESS, 60, 1, false, false, false))
 
-                onlinePlayer.addPotionEffect(PotionEffectType.BLINDNESS.createEffect(60, 1));
-
-                onlinePlayer.sendTitlePart(
+                player.sendTitlePart(
                     TitlePart.TITLE,
-                    player.role.getName().decorate(TextDecoration.BOLD)
-                );
-                onlinePlayer.sendTitlePart(
+                    sessionPlayer.role.name.decorate(TextDecoration.BOLD)
+                )
+                player.sendTitlePart(
                     TitlePart.SUBTITLE,
                     Component.text("Shh!").decorate(TextDecoration.ITALIC).color(TextColor.color(0x777777))
-                );
-
-                onlinePlayer.sendTitlePart(
+                )
+                player.sendTitlePart(
                     TitlePart.TITLE,
-                    player.role.getName().decorate(TextDecoration.BOLD)
-                );
+                    sessionPlayer.role.name.decorate(TextDecoration.BOLD)
+                )
 
-                onlinePlayer.sendMessage(Component.text("Clear chat with F3 + D"));
-                onlinePlayer.sendMessage(Component.text("You can view your role at any point with /role"));
-
-            }, 100L);
+                player.sendMessage(Component.text("You are a ").append(sessionPlayer.role.name))
+                player.sendMessage(Component.text("Clear chat with F3 + D"))
+                player.sendMessage(Component.text("You can view your role at any point with /role"))
+            }, 100L)
         }
     }
 
-    private @Nullable RoleGroup determineWinner() {
-        if (livingPlayers.isEmpty()) {
-            return null;
+    fun onSessionEnd(reason: EndGameReason?) {
+        val blockData = server.createBlockData(Material.AIR)
+        settings.bellLocation.getWorld().setBlockData(settings.bellLocation, blockData)
+        bellLabel.remove()
+
+        for (player in this.alivePlayers.values) {
+            val player = player.player ?: continue
+            if (player.gameMode == GameMode.SPECTATOR)
+                player.gameMode = GameMode.SURVIVAL
         }
 
-        for (SessionPlayer player : livingPlayers.values()) {
-            if (player.role.getRoleGroup() instanceof RoleGroup.Traitors) {
-                return player.role.getRoleGroup();
+        calculateEndGameText(reason)
+
+        server.sendMessage(Component.empty())
+        for (line in endGameText!!) {
+            server.sendMessage(line)
+        }
+        server.sendMessage(Component.empty())
+    }
+
+    private fun determineDefaultEndGameReason(): EndGameReason {
+        if (mutableAlivePlayers.isEmpty()) {
+            return EndGameReason.Draw
+        }
+
+        for (player in mutableAlivePlayers.values) {
+            if (player.role.group is RoleGroup.Traitors) {
+                return EndGameReason.RoleGroupWin(RoleGroup.Traitors)
             }
         }
 
-        return livingPlayers.values().iterator().next().role.getRoleGroup();
+        return EndGameReason.RoleGroupWin(RoleGroup.Survivors)
     }
 
-    private void startMeeting() {
-        this.meetingCooldown = configs.meetingCooldown();
-        this.activeMeeting = new Meeting(this, configs.discussionTime(), configs.votingTime());
-        this.activeMeeting.startMeeting();
-    }
-
-    public void onSessionEnd() {
-        var blockData = server.createBlockData(Material.AIR);
-        configs.bellLocation().getWorld().setBlockData(configs.bellLocation(), blockData);
-        endGameText();
-
-        if (bellLabel != null) {
-            bellLabel.remove();
-            bellLabel = null;
-        }
-    }
-
-    public void onServerTicked() {
-        if (activeMeeting != null) {
-            activeMeeting.onServerTicked();
-            if (activeMeeting.state == Meeting.MeetingState.Finished) {
-                activeMeeting = null;
+    fun startMeeting() {
+        for (sessionPlayer in mutableAlivePlayers.values) {
+            sessionPlayer.player?.let { player ->
+                if (playerNearBell(player)) {
+                    sessionPlayer.returnLocation = null
+                } else {
+                    sessionPlayer.returnLocation = player.location
+                }
+                sessionPlayer.canReturn = false
             }
-        } else {
+        }
+        this.meetingCooldown = settings.meetingCooldownTicks
+        this.activeMeeting = Meeting(this, bellLabel)
+        this.activeMeeting!!.startMeeting()
+    }
+
+    fun onServerTicked() {
+        if (activeMeeting?.state == Meeting.State.Finished) {
+            activeMeeting = null
+        }
+
+        val activeMeeting = activeMeeting
+        if (activeMeeting == null) {
             if (meetingCooldown > 0) {
-                meetingCooldown--;
+                meetingCooldown--
+
+                val seconds = ((meetingCooldown - 1) / 20) + 1
+
+                bellLabel.text(
+                    Component
+                        .text("Meeting on cooldown for ${seconds.seconds} more seconds")
+                        .color(TextColor.color(0xFFFFFF))
+                )
+                bellLabel.backgroundColor = Color.fromARGB(100, 20, 20, 20)
+                bellLabel.transformation = Transformation()
+            } else {
+                bellLabel.text(
+                    Component
+                        .text("Call meeting")
+                        .color(TextColor.color(0xAAFFAA))
+                )
+                bellLabel.backgroundColor = Color.fromARGB(100, 0, 20, 0)
+                bellLabel.transformation = Transformation(scale = Vector3f(2f, 2f, 2f))
             }
-        }
-    }
-
-    public boolean isPlayerAlive(Player player) {
-        return isPlayerAlive(player.getUniqueId());
-    }
-
-    public boolean isPlayerAlive(UUID player) {
-        return livingPlayers.containsKey(player);
-    }
-
-    public void onPlayerDeath(Player player) {
-        if (livingPlayers.containsKey(player.getUniqueId())) {
-            deadPlayers.put(player.getUniqueId(), livingPlayers.remove(player.getUniqueId()));
-        }
-    }
-
-    public void onPlayerInteractWithBlock(Player player, Location block) {
-        boolean targetIsBell = block.equals(configs.bellLocation().toBlockLocation());
-        boolean meetingNotOnCooldown = meetingCooldown <= 0;
-        if (isPlayerAlive(player) && targetIsBell && meetingNotOnCooldown) {
-            startMeeting();
-        }
-    }
-
-    public boolean onBlockRemoved(Location blockLocation) {
-        return blockLocation.equals(configs.bellLocation());
-    }
-
-    public Component onSkip(Player voter) {
-        if (activeMeeting == null) {
-            return Component.text("There is no meeting active");
-        }
-
-        if (!isPlayerAlive(voter)) {
-            return Component.text("You are not alive");
-        }
-
-        return activeMeeting.onSkip(voter);
-    }
-
-    public Component onVoteEndGame(Player voter) {
-        if (activeMeeting == null) {
-            return Component.text("There is no meeting active");
-        }
-
-        if (!isPlayerAlive(voter)) {
-            return Component.text("You are not alive");
-        }
-
-        return activeMeeting.onVoteEndGame(voter);
-    }
-
-    public Component onVote(Player voter, String name) {
-        if (activeMeeting == null) {
-            return Component.text("There is no meeting active");
-        }
-
-        if (!isPlayerAlive(voter)) {
-            return Component.text("You are not alive");
-        }
-
-        SessionPlayer voted = null;
-
-        for (SessionPlayer player : livingPlayers.values()) {
-            if (player.name().equalsIgnoreCase(name)) {
-                voted = player;
-                break;
-            }
-        }
-
-        if (voted == null) {
-            return Component.text("Target is not alive");
-        }
-
-        return activeMeeting.onVote(voter, voted);
-    }
-
-    public @Nullable Role getRole(Player player) {
-        SessionPlayer sessionPlayer = this.livingPlayers.get(player.getUniqueId());
-        if (sessionPlayer == null)
-            return null;
-        return sessionPlayer.role;
-    }
-
-    public void endGameText() {
-        int i = 0;
-
-        var winner = determineWinner();
-        if (winner != null) {
-            server.sendMessage(winner.winMessage());
         } else {
-            server.sendMessage(Component.text("Draw...").color(TextColor.color(0xFF8E63)));
+            activeMeeting.onServerTicked()
         }
+    }
 
-        for (var player : livingPlayers.values()) {
-            if (player.getPlayer() == null) {
-                continue;
+    fun isPlayerAlive(player: SessionPlayer): Boolean {
+        return isPlayerAlive(player.playerUuid)
+    }
+
+    fun isPlayerAlive(player: Player): Boolean {
+        return isPlayerAlive(player.uniqueId)
+    }
+
+    fun isPlayerAlive(player: UUID): Boolean {
+        return mutableAlivePlayers.containsKey(player)
+    }
+
+    fun getSessionPlayer(player: UUID): SessionPlayer? {
+        return mutableAlivePlayers[player]
+    }
+
+    fun onPlayerKilled(player: UUID) {
+        mutableAlivePlayers.remove(player)
+        if (mutableAlivePlayers.isEmpty() || (mutableAlivePlayers.size == 1 && settings.onePlayerEndsGame)) {
+            sessionManager.endSession()
+        }
+    }
+
+    fun onPlayerKilled(player: SessionPlayer) {
+        onPlayerKilled(player.playerUuid)
+    }
+
+    private fun applyDeadModifiers(player: Player) {
+        player.gameMode = GameMode.SPECTATOR
+    }
+
+    private fun qualifiesForLastChance(sessionPlayer: SessionPlayer, event: PlayerDeathEvent): Boolean {
+        val damage = event.player.lastDamageCause ?: return false
+
+        if (damage.cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION) {
+            if (damage.damageSource.directEntity is Player || damage.damageSource.directEntity is TNTPrimed) {
+                if (Random.nextDouble() > 0.5) {
+                    return false
+                }
             }
 
-            server.getScheduler().runTaskLater(plugin, task -> {
-                server.sendMessage(
-                    Component.text(Objects.requireNonNull(player.getPlayer().getName())).append(
-                        Component.text(" was a ").append(
-                            player.role.getName()
-                        )
+            if (damage.damageSource.directEntity is Creeper) {
+                return true
+            }
+        }
+
+        if (damage.finalDamage > 10.0) {
+            return true
+        }
+
+        if (damage.cause == EntityDamageEvent.DamageCause.FALL) {
+            return true
+        }
+
+        if (sessionPlayer.role is Role.LuckySurvivor || sessionPlayer.role is Role.LuckyTraitor) {
+            return true
+        }
+
+        return false
+    }
+
+    fun onEntityDeath(event: EntityDeathEvent) {
+        if (event.entity is EnderDragon) {
+            sessionManager.endSession(EndGameReason.RoleGroupWin(RoleGroup.Survivors))
+        }
+    }
+
+    fun onPlayerChat(event: AsyncChatEvent) {
+        event.isCancelled = true
+
+        val bubble = settings.chatRange - settings.chatFalloff
+        val falloff = settings.chatFalloff
+
+        val message = PlainTextComponentSerializer.plainText().serialize(event.message())
+        val player = event.player
+
+        if (player.gameMode == GameMode.SPECTATOR) {
+            server.consoleSender.sendMessage(Component.text("☠ <${player.name}> $message").color(TextColor.color(0x888888)))
+            for (listener in server.onlinePlayers) {
+                if (listener.gameMode == GameMode.SPECTATOR) {
+                    player.sendMessage(Component.text("☠ <${player.name}> $message").color(TextColor.color(0x888888)))
+                }
+            }
+        } else {
+            server.consoleSender.sendMessage(Component.text("<${player.name}> $message"))
+            for (listener in server.onlinePlayers) {
+                if (listener.world.key != player.world.key) {
+                    continue
+                }
+
+                var volume = 1.0
+
+                if (player.uniqueId != listener.uniqueId) {
+                    val distance = player.eyeLocation.distance(listener.eyeLocation)
+
+                    val start = player.eyeLocation.toVector()
+                    val end = listener.eyeLocation.toVector()
+                    val direction = end.subtract(start)
+
+                    val ray = BlockIterator(player.world, start, direction, 0.0, ceil(distance).toInt())
+
+                    var dampening = 0.0
+                    for (block in ray) {
+                        if (block.isSolid) {
+                            dampening += settings.blockDampening
+                        }
+                    }
+
+                    volume = (1-(distance-bubble+dampening)/(falloff+dampening/2)).coerceIn(0.0..1.0)
+                }
+
+                if (listener.gameMode == GameMode.SPECTATOR) {
+                    volume = max(0.2, volume)
+                }
+
+                if (volume == 0.0) {
+                    continue
+                }
+
+                val message = if (volume > 0.5f || listener.gameMode == GameMode.SPECTATOR) {
+                    message
+                } else {
+                    message.map {
+                        if (volume < Random.nextDouble(0.0, 0.6)) {
+                            "$%#*&@][(){}".random()
+                        } else {
+                            it
+                        }
+                    }.joinToString("")
+                }
+
+                listener.sendMessage(Component.text("<${player.name}> $message").color(TextColor.color(volume.toFloat(), volume.toFloat(), volume.toFloat())))
+            }
+        }
+
+    }
+
+    fun onPlayerDeath(event: PlayerDeathEvent) {
+        event.showDeathMessages = false
+
+        val player = event.player
+
+        val sessionPlayer: SessionPlayer = mutableAlivePlayers[player.uniqueId] ?: run {
+            return
+        }
+
+        if (!sessionPlayer.lastChanceUsed && qualifiesForLastChance(sessionPlayer, event)) {
+            player.sendTitlePart(
+                TitlePart.TIMES,
+                Title.Times.times(
+                    Duration.ofMillis(100),
+                    Duration.ofMillis(1500),
+                    Duration.ofSeconds(1)
+                )
+            )
+
+            player.sendTitlePart(
+                TitlePart.TITLE,
+                MiniMessage.deserialize("<gradient:#88f0fc:#ccffff><b>Last chance!</b></gradient>")
+            )
+
+            player.playEffect(EntityEffect.PROTECTED_FROM_DEATH)
+
+            event.isCancelled = true
+
+            player.health = 5.0
+            player.addPotionEffect(PotionEffect(PotionEffectType.RESISTANCE, 100, 2, true, true))
+            player.addPotionEffect(PotionEffect(PotionEffectType.SPEED, 100, 1, true, true))
+
+            sessionPlayer.lastChanceUsed = true
+
+            return
+        }
+
+        onPlayerKilled(player.uniqueId)
+    }
+
+    fun onEntityDamageByEntity(event: EntityDamageByEntityEvent) {
+        if (event.damage > 1) {
+            getSessionPlayer(event.entity.uniqueId)?.let { sessionPlayer ->
+                if (sessionPlayer.returnLocation != null) {
+                    sessionPlayer.canReturn = false
+                    sessionPlayer.player?.sendMessage(Component
+                        .text("You may no longer use /back")
+                        .color(TextColor.color(0xFF0000))
                     )
-                );
-            }, i * 10L);
+                }
+            }
+        }
 
-            i++;
+        if (event.entity !is Player) {
+            event.damage *= settings.entityDamageFactor
         }
     }
 
-    public sealed interface RoleGroup {
-        @NotNull TextComponent winMessage();
-
-        final class Traitors implements RoleGroup {
-            private Traitors() {}
-            public static final Traitors INSTANCE = new Traitors();
-
-            @Override
-            public @NotNull TextComponent winMessage() {
-                return Component
-                    .text("Traitors win...")
-                    .color(TextColor.color(0x7A1D2E));
-            }
-        }
-
-        final class Survivors implements RoleGroup {
-            private Survivors() {}
-            public static final Survivors INSTANCE = new Survivors();
-
-            @Override
-            public @NotNull TextComponent winMessage() {
-                return Component
-                    .text("Survivors win!")
-                    .color(TextColor.color(0x01FFCC));
-            }
+    fun onEntityTakeDamage(event: EntityDamageEvent) {
+        if (event.entity is Player && activeMeeting != null) {
+            event.isCancelled = true
         }
     }
 
-    public interface Role {
-        @NotNull TextComponent getName();
-        @NotNull RoleGroup getRoleGroup();
-
-        final class Traitor implements Role {
-            @Override
-            public @NotNull TextComponent getName() {
-                return Component
-                        .text("Traitor")
-                        .color(TextColor.color(0x7A1D2E));
-            }
-
-            @Override
-            public @NotNull RoleGroup getRoleGroup() {
-                return RoleGroup.Survivors.INSTANCE;
-            }
-        }
-
-        final class Survivor implements Role {
-            @Override
-            public @NotNull TextComponent getName() {
-                return Component
-                    .text("Survivor")
-                    .color(TextColor.color(0x01FFCC));
-            }
-
-            @Override
-            public @NotNull RoleGroup getRoleGroup() {
-                return RoleGroup.Survivors.INSTANCE;
-            }
-        }
-//        Traitor,
-//        Innocent;
-//
-//        public @NotNull TextComponent getName() {
-//            return switch (this) {
-//                case Traitor -> Component
-//                    .text("Traitor")
-//                    .color(TextColor.color(0x7A1D2E))
-//                    .shadowColor(ShadowColor.shadowColor(0x290A13));
-//                case Innocent -> Component
-//                    .text("Survivor")
-//                    .color(TextColor.color(0x1FFCC))
-//                    .shadowColor(ShadowColor.shadowColor(0xFFFFFF));
-//            };
-//        }
-    }
-
-    private record SessionPlayer(
-        @NotNull UUID player,
-        @NotNull String name,
-        @NotNull Role role,
-        @NotNull Server server
-    ) {
-        public @Nullable Player getPlayer() {
-            return server.getPlayer(player);
+    fun onPlayerJoin(player: Player) {
+        if (!isPlayerAlive(player)) {
+            applyDeadModifiers(player)
         }
     }
 
-    private static class Meeting {
-        private final Session session;
-        private final Server server;
-        private MeetingState state;
-        private int discussionTicks;
-        private int votingTicks;
+    fun onPlayerRespawn(player: Player) {
+        if (!isPlayerAlive(player)) {
+            applyDeadModifiers(player)
+        }
+    }
 
-        private final Map<OfflinePlayer, Vote> votes;
-
-        private Meeting(Session session, int discussionTicks, int votingTicks) {
-            this.session = session;
-            this.server = session.server;
-            this.state = MeetingState.Uninit;
-            this.discussionTicks = discussionTicks;
-            this.votingTicks = votingTicks;
-            this.votes = new HashMap<>();
+    fun onPlayerDrop(event: PlayerDropItemEvent) {
+        val sessionPlayer: SessionPlayer = mutableAlivePlayers[event.player.uniqueId] ?: run {
+            return
         }
 
-        private void startMeeting() {
-            server.sendTitlePart(TitlePart.TIMES, Title.Times.times(Duration.ZERO, Duration.ofSeconds(2), Duration.ofMillis(500)));
-            server.sendTitlePart(TitlePart.TITLE, Component.text("MEETING!").color(TextColor.color(255, 0, 0)));
-            startDiscussion();
+        if (sessionPlayer.role.equipment.containsKey(event.player.inventory.heldItemSlot)) {
+            event.isCancelled = true
+        }
+    }
+
+    fun onPlayerSwapHands(event: PlayerSwapHandItemsEvent) {
+        val sessionPlayer: SessionPlayer = mutableAlivePlayers[event.player.uniqueId] ?: run {
+            return
         }
 
-        private void startDiscussion() {
-            this.state = MeetingState.Discussion;
-            server.sendMessage(Component.text("Discussion started"));
+        if (
+            sessionPlayer.role.equipment.containsKey(event.player.inventory.heldItemSlot) ||
+            sessionPlayer.role.equipment.containsKey(40)
+        ) {
+            event.isCancelled = true
+        }
+    }
+
+    fun onInventoryClick(event: InventoryClickEvent) {
+        val player = event.whoClicked as? Player ?: run {
+            return
         }
 
-        private void startVoting() {
-            this.state = MeetingState.Voting;
-            server.sendMessage(Component.text("Voting started"));
+        val sessionPlayer: SessionPlayer = mutableAlivePlayers[player.uniqueId] ?: run {
+            return
         }
 
-        private void endMeeting() {
-            this.state = MeetingState.Finished;
+        if (sessionPlayer.role.equipment.containsKey(event.slot) || sessionPlayer.role.equipment.containsKey(event.rawSlot)) {
+            event.isCancelled = true
+        }
+    }
 
-            Map<Vote, Integer> voteCounts = new HashMap<>();
+    fun onRightClickItem(player: Player, slot: Int): Boolean {
+        val sessionPlayer: SessionPlayer = mutableAlivePlayers[player.uniqueId] ?: run {
+            return false
+        }
 
-            for (Vote vote : votes.values()) {
-                voteCounts.put(vote, voteCounts.getOrDefault(vote, 0) + 1);
+        if (sessionPlayer.role.equipment.containsKey(slot)) {
+            sessionPlayer.role.handleEquipmentInteraction(sessionPlayer, slot)
+            return true
+        }
+
+        return false
+    }
+
+    fun onPlayerRightClickBlock(player: Player, block: Location): Boolean {
+        val targetIsBell = block.isSameBlockAs(settings.bellLocation)
+        val meetingNotOnCooldown = meetingCooldown <= 0
+        val playerAlive = isPlayerAlive(player)
+
+        if (playerAlive && targetIsBell) {
+            if (activeMeeting == null && meetingNotOnCooldown) {
+                startMeeting()
+            } else {
+                activeMeeting!!.onBellClicked(player)
             }
+            return true
+        }
+        return false
+    }
 
-            Vote highestVote = null;
-            int highestVoteCount = 0;
-            boolean tied = true;
+    fun onBlockRemoved(blockLocation: Location): Boolean {
+        return blockLocation == settings.bellLocation
+    }
 
-            for (Map.Entry<Vote, Integer> entry : voteCounts.entrySet()) {
-                if (highestVote == null) {
-                    highestVote = entry.getKey();
-                    highestVoteCount = entry.getValue();
-                    tied = false;
-                } else if (entry.getValue() > highestVoteCount) {
-                    tied = false;
-                    highestVote = entry.getKey();
-                    highestVoteCount = entry.getValue();
-                } else if (entry.getValue() == highestVoteCount) {
-                    tied = true;
-                }
-            }
-
-            if (tied) {
-                server.sendMessage(Component.text("Vote tied (skip)"));
-                return;
-            }
-            switch (highestVote) {
-                case Vote.EndGame endGame -> {
-                    server.sendMessage(Component.text("Session voted to end"));
-                    session.sessionManager.endSession(session);
-                }
-                case Vote.PlayerVote playerVote -> {
-                    if (playerVote.player().getPlayer() != null) {
-                        playerVote.player().getPlayer().kill();
-                    }
-
-                    server.sendMessage(
-                        Component.text(playerVote.player.name)
-                            .append(Component.text(" has been voted out"))
-                    );
-                }
-                case Vote.Skip skip -> {
-                    server.sendMessage(Component.text("Meeting skipped"));
-                }
-            }
+    fun onVote(voter: Player, vote: Vote): Component {
+        val meeting = activeMeeting ?: run {
+            return Component.text("There is no meeting active")
         }
 
-        private Component onVote(Player voter, SessionPlayer voted) {
-            if (votes.containsKey(voter)) {
-                return Component.text("You've already voted");
-            }
-
-            votes.put(voter, new Vote.PlayerVote(voted));
-
-            return Component
-                .text("Your vote for ")
-                .append(Component.text(voted.name()))
-                .append(Component.text(" has been cast"));
+        if (!isPlayerAlive(voter)) {
+            return Component.text("Voter is not alive")
         }
 
-        private Component onSkip(Player voter) {
-            if (votes.containsKey(voter)) {
-                return Component.text("You've already voted");
-            }
-
-            votes.put(voter, new Vote.Skip());
-
-            return Component.text("You have skipped");
+        if (vote is Vote.PlayerVote && !isPlayerAlive(vote.playerUuid)) {
+            return Component.text("Voted is not alive")
         }
 
-        private Component onVoteEndGame(Player voter) {
-            if (votes.containsKey(voter)) {
-                return Component.text("You've already voted");
-            }
+        return meeting.onVote(voter, vote)
+    }
 
-            votes.put(voter, new Vote.EndGame());
+    fun getRole(player: Player): Role? {
+        val sessionPlayer = this.mutableAlivePlayers[player.uniqueId] ?: return null
+        return sessionPlayer.role
+    }
 
-            return Component.text("You have skipped");
-        }
+    var endGameText: List<TextComponent>? = null
+        private set
 
-        private void onServerTicked() {
-            switch (state) {
-                case Discussion -> {
-                    discussionTicks--;
+    fun calculateEndGameText(reason: EndGameReason?) {
+        val text = mutableListOf<TextComponent>()
 
-                    server.sendActionBar(Component
-                        .text("Voting starts in ")
-                        .append(Component.text(((discussionTicks - 1) / 20) + 1))
-                        .append(Component.text(" seconds"))
-                        .color(TextColor.color(0, 200,  200))
-                    );
+        val reason = reason ?: determineDefaultEndGameReason()
+        text.add(reason.winMessage)
 
-                    if (discussionTicks <= 0) {
-                        this.startVoting();
-                    }
-                }
-                case Voting -> {
-                    votingTicks--;
+        val crown = Component
+            .text("\uD83D\uDC51")
+            .color(TextColor.color(0xF0B600))
 
-                    server.sendActionBar(Component
-                        .text("Voting ends in ")
-                        .append(Component.text(((votingTicks - 1) / 20) + 1))
-                        .append(Component.text(" seconds"))
-                        .color(TextColor.color(0, 200,  200))
-                    );
+        val skull = Component
+            .text("☠")
+            .color(TextColor.color(0x555555))
 
-                    if (votingTicks <= 0) {
-                        this.endMeeting();
-                    }
-                }
+        val winners = mutableListOf<TextComponent>()
+        val aliveButLost = mutableListOf<TextComponent>()
+        val dead = mutableListOf<TextComponent>()
+
+        for (player in mutableAlivePlayers.values) {
+            if (reason.isWinner(this, player)) {
+                winners.add(
+                    Component.empty()
+                        .append(crown)
+                        .append(Component.text(" ${player.name}"))
+                        .append(Component
+                            .text(" ... ")
+                            .color(TextColor.color(0x888888))
+                        )
+                        .append(player.role.name)
+                )
+            } else {
+                aliveButLost.add(
+                    Component.empty()
+                        .append(Component
+                            .text(" ${player.name}")
+                            .color(TextColor.color(0x888888))
+                        )
+                        .append(Component
+                            .text(" ... ")
+                            .color(TextColor.color(0x888888))
+                        )
+                        .append(player.role.name)
+                )
             }
         }
 
-        private enum MeetingState {
-            Uninit,
-            Discussion,
-            Voting,
-            Finished
+        for (player in allPlayers.values) {
+            if (!isPlayerAlive(player)) {
+                dead.add(
+                    Component.empty()
+                        .append(skull)
+                        .append(
+                            Component
+                                .text(" ${player.name}")
+                                .color(TextColor.color(0x555555))
+                                .decorate(TextDecoration.ITALIC)
+                        )
+                        .append(Component
+                            .text(" ... ")
+                            .color(TextColor.color(0x888888))
+                        )
+                        .append(
+                            player.role.name
+                                .decorate(TextDecoration.ITALIC)
+                        )
+                )
+            }
         }
 
-        private sealed interface Vote {
-            record PlayerVote(SessionPlayer player) implements Vote {}
-            record Skip() implements Vote {}
-            record EndGame() implements Vote {}
+        if (winners.isNotEmpty()) {
+            text.add(Component.empty())
+
+            text.add(Component
+                .text("Winners:")
+                .color(TextColor.color(0xF0B600))
+                .decorate(TextDecoration.BOLD)
+            )
+
+            for (component in winners) {
+                text.add(component)
+            }
         }
+
+        if (aliveButLost.isNotEmpty()) {
+            text.add(Component.empty())
+
+            text.add(Component
+                .text("Close but no cigar:")
+                .color(TextColor.color(0x888888))
+            )
+
+            for (component in aliveButLost) {
+                text.add(component)
+            }
+        }
+
+        if (dead.isNotEmpty()) {
+            text.add(Component.empty())
+
+            text.add(Component
+                .text("Dead:")
+                .color(TextColor.color(0x555555))
+            )
+
+            for (component in dead) {
+                text.add(component)
+            }
+        }
+
+        endGameText = text
     }
 }

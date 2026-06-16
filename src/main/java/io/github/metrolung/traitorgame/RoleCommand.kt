@@ -1,76 +1,57 @@
-package io.github.metrolung.traitorgame;
+package io.github.metrolung.traitorgame
 
-import com.mojang.brigadier.Command;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.context.CommandContext;
-import io.papermc.paper.command.brigadier.CommandSourceStack;
-import io.papermc.paper.command.brigadier.Commands;
-import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
-import net.kyori.adventure.text.Component;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
+import com.mojang.brigadier.Command
+import com.mojang.brigadier.builder.LiteralArgumentBuilder
+import com.mojang.brigadier.context.CommandContext
+import io.papermc.paper.command.brigadier.CommandSourceStack
+import io.papermc.paper.command.brigadier.Commands
+import io.papermc.paper.command.brigadier.argument.ArgumentTypes
+import io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver
+import net.kyori.adventure.text.Component
+import org.bukkit.entity.Player
+import java.util.function.Predicate
 
-public class RoleCommand {
-    private final TraitorGame plugin;
-
-    public RoleCommand(TraitorGame plugin) {
-        this.plugin = plugin;
-    }
-
-    public LiteralArgumentBuilder<CommandSourceStack> create() {
+class RoleCommand(private val plugin: TraitorGame) {
+    fun create(): LiteralArgumentBuilder<CommandSourceStack> {
         return Commands.literal("role")
-            .executes(this::executeRole)
-            .then(Commands.argument("player", ArgumentTypes.player())
-                .requires(ctx -> ctx.getSender().isOp())
-                .executes(this::executeRoleOther)
-            );
+            .executes { ctx -> this.executeRole(ctx!!) }
+            .then(
+                Commands.argument("target", ArgumentTypes.player())
+                    .requires { source -> source.sender.isOp }
+                    .executes { ctx -> this.executeRoleOther(ctx) }
+            )
     }
 
-    private int executeRole(CommandContext<CommandSourceStack> ctx) {
-        Entity executor = ctx.getSource().getExecutor();
-
-        if (!(executor instanceof Player player)) {
-            return Command.SINGLE_SUCCESS;
+    private fun executeRole(ctx: CommandContext<CommandSourceStack>): Int {
+        val executor = ctx.source.executor as? Player ?: run {
+            ctx.source.sender.sendPlainMessage("Executor must be player")
+            return Command.SINGLE_SUCCESS
         }
 
-        if (plugin.getSessionManager().getSession() == null) {
-            return Command.SINGLE_SUCCESS;
-        }
-
-        Session.Role role = plugin.getSessionManager().getSession().getRole(player);
-        if (role == null) {
-            ctx.getSource().getSender().sendPlainMessage("%s has no role".formatted(player.name()));
-            return Command.SINGLE_SUCCESS;
-        }
-
-        ctx.getSource().getSender().sendMessage(player.name().append(
-            Component.text(" has role: ").append(
-                role.getName()
-            )
-        ));
-
-        return Command.SINGLE_SUCCESS;
+        return getRole(ctx.source, executor)
     }
 
-    private int executeRoleOther(CommandContext<CommandSourceStack> ctx) {
-        Player player = ctx.getArgument("player", Player.class);
+    private fun executeRoleOther(ctx: CommandContext<CommandSourceStack>): Int {
+        val targetResolver = ctx.getArgument("target", PlayerSelectorArgumentResolver::class.java)
+        val target = targetResolver.resolve(ctx.source).first()
 
-        if (plugin.getSessionManager().getSession() == null) {
-            return Command.SINGLE_SUCCESS;
+        return getRole(ctx.source, target)
+    }
+
+    private fun getRole(source: CommandSourceStack, player: Player): Int {
+        val role = plugin.sessionManager.session?.getRole(player) ?: run {
+            source.sender.sendPlainMessage("Could not determine role of ${player.name}")
+            return Command.SINGLE_SUCCESS
         }
 
-        Session.Role role = plugin.getSessionManager().getSession().getRole(player);
-        if (role == null) {
-            ctx.getSource().getSender().sendPlainMessage("%s has no role".formatted(player.name()));
-            return Command.SINGLE_SUCCESS;
-        }
-
-        ctx.getSource().getSender().sendMessage(player.name().append(
-            Component.text(" has role: ").append(
-                role.getName()
+        source.sender.sendMessage(
+            player.name().append(
+                Component.text(" has role: ").append(
+                    role.name
+                )
             )
-        ));
+        )
 
-        return Command.SINGLE_SUCCESS;
+        return Command.SINGLE_SUCCESS
     }
 }

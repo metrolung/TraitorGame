@@ -1,31 +1,33 @@
-package io.github.metrolung.traitorgame;
+package io.github.metrolung.traitorgame
 
-import io.github.metrolung.traitorgame.RoleCommand;
-import io.github.metrolung.traitorgame.SessionManager;
-import io.github.metrolung.traitorgame.TraitorGameCommand;
-import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
-import org.bukkit.plugin.java.JavaPlugin;
+import io.papermc.paper.command.brigadier.Commands
+import io.papermc.paper.plugin.lifecycle.event.handler.LifecycleEventHandler
+import io.papermc.paper.plugin.lifecycle.event.registrar.ReloadableRegistrarEvent
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
+import org.bukkit.plugin.java.JavaPlugin
 
-public final class TraitorGame extends JavaPlugin {
-    private final SessionManager sessionManager = new SessionManager();
+class TraitorGame : JavaPlugin() {
+    val sessionManager: SessionManager = SessionManager()
 
-    @Override
-    public void onEnable() {
-        this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, commands -> {
-            commands.registrar().register(new TraitorGameCommand(this).create().build());
-            commands.registrar().register(new RoleCommand(this).create().build());
-            commands.registrar().register(new VoteCommand(this).create().build());
-        });
+    override fun onEnable() {
+        saveDefaultConfig()
 
-        getServer().getPluginManager().registerEvents(sessionManager, this);
+        this.lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
+            event.registrar().register(TraitorGameCommand(this).create().build())
+            event.registrar().register(RoleCommand(this).create().build())
+            event.registrar().register(VoteCommand(this).create().build())
+            event.registrar().register(BackCommand(this).create().build())
+        }
+
+        server.pluginManager.registerEvents(sessionManager, this)
     }
 
-    @Override
-    public void onDisable() {
-        // Plugin shutdown logic
+    override fun onDisable() {
+        sessionManager.endSession()
     }
 
-    public SessionManager getSessionManager() {
-        return sessionManager;
+    companion object {
+        @JvmField
+        val commandNamespace = "traitorgame"
     }
 }

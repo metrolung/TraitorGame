@@ -1,95 +1,149 @@
-package io.github.metrolung.traitorgame;
+package io.github.metrolung.traitorgame
 
-import com.destroystokyo.paper.event.server.ServerTickEndEvent;
-import org.bukkit.Location;
-import org.bukkit.Server;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockExplodeEvent;
-import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.plugin.Plugin;
+import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent
+import com.destroystokyo.paper.event.server.ServerTickEndEvent
+import io.papermc.paper.event.player.AsyncChatEvent
+import org.bukkit.Server
+import org.bukkit.event.EventHandler
+import org.bukkit.event.Listener
+import org.bukkit.event.block.BlockBreakEvent
+import org.bukkit.event.block.BlockExplodeEvent
+import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.entity.EntityDamageEvent
+import org.bukkit.event.entity.EntityDeathEvent
+import org.bukkit.event.entity.PlayerDeathEvent
+import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.player.PlayerDropItemEvent
+import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.player.PlayerSwapHandItemsEvent
+import org.bukkit.plugin.Plugin
 
-import javax.annotation.Nullable;
+class SessionManager : Listener {
+    var oldSession: Session? = null
+        private set
+    var session: Session? = null
+        private set
 
-public class SessionManager implements Listener {
-    private Session oldSession;
-    private Session session;
+    val isSessionActive: Boolean
+        get() = session != null
 
-    public SessionManager() {}
-
-    public void startSession(Server server, Plugin plugin, SessionConfigs configs) {
+    fun startSession(server: Server, plugin: Plugin, configs: SessionSettings) {
         if (this.session == null) {
-            this.session = new Session(server, plugin, this, configs);
-            this.session.onSessionStart();
+            this.session = Session(server, plugin, this, configs)
+            this.session!!.onSessionStart()
         } else {
-            throw new RuntimeException("Session already active");
+            error("Session already active")
         }
     }
 
-    public void endSession(Session session) {
-        if (this.session == session) {
-            this.oldSession = this.session;
-            this.session = null;
-            session.onSessionEnd();
-        }
-    }
-
-    public void endSession() {
-        this.endSession(this.getSession());
-    }
-
-    public boolean isSessionActive() {
-        return session != null;
-    };
-
-    public @Nullable Session getSession() {
-        return session;
-    }
-
-    public @Nullable Session getOldSession() {
-        return oldSession;
-    }
-
-
-    @EventHandler
-    private void onServerTicked(ServerTickEndEvent event) {
-        if (session != null) {
-            session.onServerTicked();
+    @JvmOverloads
+    fun endSession(reason: EndGameReason? = null) {
+        this.session?.let { session ->
+            this.oldSession = session
+            this.session = null
+            session.onSessionEnd(reason)
         }
     }
 
     @EventHandler
-    private void onPlayerDeath(PlayerDeathEvent death) {
-        if (session != null) {
-            session.onPlayerDeath(death.getPlayer());
-        }
+    @Suppress("UNUSED")
+    private fun onServerTicked(event: ServerTickEndEvent) {
+        session?.onServerTicked()
     }
 
     @EventHandler
-    public void onPlayerInteract(PlayerInteractEvent event) {
-        if (session != null) {
-            if (event.getClickedBlock() != null) {
-                session.onPlayerInteractWithBlock(event.getPlayer(), event.getClickedBlock().getLocation().toBlockLocation());
+    private fun onPlayerDeath(event: PlayerDeathEvent) {
+        session?.onPlayerDeath(event)
+    }
+
+    @EventHandler
+    private fun onPlayerChat(event: AsyncChatEvent) {
+        session?.onPlayerChat(event)
+    }
+
+    @EventHandler
+    private fun onEntityDeath(event: EntityDeathEvent) {
+        session?.onEntityDeath(event)
+    }
+
+    @EventHandler
+    private fun onEntityDamageByEntity(event: EntityDamageByEntityEvent) {
+        session?.onEntityDamageByEntity(event)
+    }
+
+    @EventHandler
+    private fun onEntityTakeDamage(event: EntityDamageEvent) {
+        session?.onEntityTakeDamage(event)
+    }
+
+    @EventHandler
+    private fun onPlayerJoinGame(event: PlayerJoinEvent) {
+        session?.onPlayerJoin(event.player)
+    }
+
+    @EventHandler
+    private fun onPlayerRespawn(event: PlayerPostRespawnEvent) {
+        session?.onPlayerRespawn(event.player)
+    }
+
+    @EventHandler
+    private fun onPlayerDrop(event: PlayerDropItemEvent) {
+        session?.onPlayerDrop(event)
+    }
+
+    @EventHandler
+    private fun onPlayerSwapHands(event: PlayerSwapHandItemsEvent) {
+        session?.onPlayerSwapHands(event)
+    }
+
+    @EventHandler
+    private fun onInventoryClick(event: InventoryClickEvent) {
+        session?.onInventoryClick(event)
+    }
+
+    @EventHandler
+    fun onPlayerInteract(event: PlayerInteractEvent) {
+        if (!event.action.isRightClick) {
+            return
+        }
+
+        val player = event.player
+
+        session?.let { session ->
+            event.hand?.let { hand ->
+                if (session.onRightClickItem(player, hand.getIndex(player))) {
+                    event.isCancelled = true
+                    return
+                }
+            }
+
+            event.clickedBlock?.let { clickedBlock ->
+                if (session.onPlayerRightClickBlock(
+                    event.getPlayer(),
+                    clickedBlock.location.toBlockLocation()
+                )) {
+                    event.isCancelled = true
+                    return
+                }
             }
         }
     }
 
     @EventHandler
-    private void onBlockBroken(BlockBreakEvent event) {
-        if (session != null) {
-            if (session.onBlockRemoved(event.getBlock().getLocation().toBlockLocation())) {
-                event.setCancelled(true);
+    private fun onBlockBroken(event: BlockBreakEvent) {
+        session?.let { session ->
+            if (session.onBlockRemoved(event.block.location.toBlockLocation())) {
+                event.isCancelled = true
             }
         }
     }
 
     @EventHandler
-    private void onBlockBroken(BlockExplodeEvent event) {
-        if (session != null) {
-            if (session.onBlockRemoved(event.getBlock().getLocation().toBlockLocation())) {
-                event.setCancelled(true);
+    private fun onBlockBroken(event: BlockExplodeEvent) {
+        session?.let { session ->
+            if (session.onBlockRemoved(event.block.location.toBlockLocation())) {
+                event.isCancelled = true
             }
         }
     }

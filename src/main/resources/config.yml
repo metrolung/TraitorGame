@@ -1,0 +1,12 @@
+
+gameplay:
+  meeting-cooldown: 120
+  discussion-time: 60
+  voting-time: 90
+  entity-damage-factor: 0.5
+  one-player-ends-game: true
+
+chat:
+  range: 15
+  falloff: 15
+  block-dampening: 1

@@ -1,70 +1,97 @@
-package io.github.metrolung.traitorgame;
+package io.github.metrolung.traitorgame
 
-import com.mojang.brigadier.Command;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.context.CommandContext;
-import io.papermc.paper.command.brigadier.CommandSourceStack;
-import io.papermc.paper.command.brigadier.Commands;
+import com.mojang.brigadier.Command
+import com.mojang.brigadier.arguments.IntegerArgumentType
+import com.mojang.brigadier.builder.LiteralArgumentBuilder
+import com.mojang.brigadier.context.CommandContext
+import io.papermc.paper.command.brigadier.CommandSourceStack
+import io.papermc.paper.command.brigadier.Commands
+import org.bukkit.entity.Player
 
-public class TraitorGameCommand {
-    private final TraitorGame plugin;
-
-    public TraitorGameCommand(TraitorGame plugin) {
-        this.plugin = plugin;
-    }
-
-    public LiteralArgumentBuilder<CommandSourceStack> create() {
+class TraitorGameCommand(private val plugin: TraitorGame) {
+    fun create(): LiteralArgumentBuilder<CommandSourceStack> {
         return Commands.literal("traitorgame")
-            .requires(sender -> sender.getSender().isOp())
-            .then(Commands.literal("start")
-                .then(Commands.argument("traitorcount", IntegerArgumentType.integer(0))
-                    .executes(this::executeStart)
-                )
+            .requires { source -> source.sender.isOp }
+            .then(
+                Commands.literal("start")
+                    .then(
+                        Commands.argument("traitorcount", IntegerArgumentType.integer(0))
+                            .executes { ctx -> this.executeStart(ctx) }
+                    )
             )
-            .then(Commands.literal("end")
-                .executes(this::executeEnd)
+            .then(
+                Commands.literal("end")
+                    .executes { ctx -> this.executeEnd(ctx) }
             )
-            .then(Commands.literal("result")
-                .executes(this::executeResult)
-            );
+            .then(
+                Commands.literal("forcemeeting")
+                    .executes { ctx -> this.executeForceMeeting(ctx) }
+            )
+            .then(
+                Commands.literal("result")
+                    .executes { ctx -> this.executeResult(ctx) }
+            )
     }
 
-    private int executeStart(CommandContext<CommandSourceStack> ctx) {
-        if (plugin.getSessionManager().isSessionActive()) {
-            ctx.getSource().getSender().sendPlainMessage("Session currently active");
-            return Command.SINGLE_SUCCESS;
+    private fun executeStart(ctx: CommandContext<CommandSourceStack>): Int {
+        if (plugin.sessionManager.isSessionActive) {
+            ctx.source.sender.sendPlainMessage("Session currently active")
+            return Command.SINGLE_SUCCESS
         }
 
-        int traitorCount = ctx.getArgument("traitorcount", int.class);
+        val traitorCount = ctx.getArgument("traitorcount", Int::class.javaPrimitiveType)
 
-        plugin.getSessionManager().startSession(plugin.getServer(), plugin, new SessionConfigs(
-                20*60*5,
-                20*30,
-                20*60,
+        plugin.sessionManager.startSession(
+            plugin.server, plugin, SessionSettings.create(
+                plugin,
                 traitorCount,
-                ctx.getSource().getLocation()
-        ));
+                ctx.source.location.toBlockLocation()
+            )
+        )
 
-        return Command.SINGLE_SUCCESS;
+        return Command.SINGLE_SUCCESS
     }
 
-    private int executeEnd(CommandContext<CommandSourceStack> ctx) {
-        plugin.getSessionManager().endSession();
+    private fun executeEnd(ctx: CommandContext<CommandSourceStack>): Int {
+        plugin.sessionManager.endSession()
 
-        return Command.SINGLE_SUCCESS;
+        return Command.SINGLE_SUCCESS
     }
 
-    private int executeResult(CommandContext<CommandSourceStack> ctx) {
-        var oldSession = plugin.getSessionManager().getOldSession();
+    private fun executeForceMeeting(ctx: CommandContext<CommandSourceStack>): Int {
+        val session = plugin.sessionManager.session ?: run {
+            ctx.source.sender.sendMessage("No active session")
+            return Command.SINGLE_SUCCESS
+        }
+
+        session.startMeeting()
+
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun executeResult(ctx: CommandContext<CommandSourceStack>): Int {
+        val oldSession = plugin.sessionManager.oldSession
+
+        val executor = ctx.source.executor as? Player ?: run {
+            ctx.source.sender.sendPlainMessage("Executor must be player")
+            return Command.SINGLE_SUCCESS
+        }
 
         if (oldSession == null) {
-            ctx.getSource().getSender().sendPlainMessage("No previous session");
-            return Command.SINGLE_SUCCESS;
+            ctx.source.sender.sendPlainMessage("No previous session")
+            return Command.SINGLE_SUCCESS
         }
 
-        oldSession.endGameText();
+        val endGameText = oldSession.endGameText
+        if (endGameText == null) {
+            ctx.source.sender.sendPlainMessage("Could not retrieve end game message")
+            return Command.SINGLE_SUCCESS
+        }
 
-        return Command.SINGLE_SUCCESS;
+        for (line in endGameText) {
+            executor.sendMessage(line)
+        }
+
+        return Command.SINGLE_SUCCESS
     }
 }
