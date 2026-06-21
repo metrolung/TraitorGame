@@ -1,12 +1,10 @@
 package io.github.metrolung.traitorgame
 
-import io.papermc.paper.command.brigadier.Commands
-import io.papermc.paper.plugin.lifecycle.event.handler.LifecycleEventHandler
-import io.papermc.paper.plugin.lifecycle.event.registrar.ReloadableRegistrarEvent
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
+import org.bukkit.NamespacedKey
 import org.bukkit.plugin.java.JavaPlugin
 
-class TraitorGame : JavaPlugin() {
+class TraitorGamePlugin : JavaPlugin() {
     val sessionManager: SessionManager = SessionManager()
 
     override fun onEnable() {
@@ -17,6 +15,7 @@ class TraitorGame : JavaPlugin() {
             event.registrar().register(RoleCommand(this).create().build())
             event.registrar().register(VoteCommand(this).create().build())
             event.registrar().register(BackCommand(this).create().build())
+            event.registrar().register(HowToPlayCommand.create().build())
         }
 
         server.pluginManager.registerEvents(sessionManager, this)
@@ -28,6 +27,8 @@ class TraitorGame : JavaPlugin() {
 
     companion object {
         @JvmField
-        val commandNamespace = "traitorgame"
+        val namespace = "traitorgame"
+
+        fun key(s: String) = NamespacedKey(namespace, s)
     }
 }

@@ -5,13 +5,9 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
-import io.papermc.paper.command.brigadier.argument.ArgumentTypes
-import io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver
-import net.kyori.adventure.text.Component
 import org.bukkit.entity.Player
-import java.util.function.Predicate
 
-class BackCommand(private val plugin: TraitorGame) {
+class BackCommand(private val plugin: TraitorGamePlugin) {
     fun create(): LiteralArgumentBuilder<CommandSourceStack> {
         return Commands.literal("back")
             .executes { ctx -> this.executeBack(ctx) }

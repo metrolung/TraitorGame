@@ -1,22 +1,32 @@
 package io.github.metrolung.traitorgame
 
-import com.destroystokyo.paper.profile.PlayerProfile
 import io.papermc.paper.datacomponent.DataComponentTypes
-import io.papermc.paper.datacomponent.item.ResolvableProfile
 import net.kyori.adventure.text.Component
-import org.bukkit.Bukkit
 import org.bukkit.Material
-import org.bukkit.Server
+import org.bukkit.NamespacedKey
+import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemStack
-import org.bukkit.inventory.meta.SkullMeta
+import org.bukkit.persistence.PersistentDataType
 
 
 @Suppress("UnstableApiUsage")
 object ItemStacks {
 
-    val camera = ItemStack.of(Material.PLAYER_HEAD).apply {
-        this.setData(DataComponentTypes.CUSTOM_NAME, Component.text("Camera"))
-//        this.setData(DataComponentTypes.PROFILE, ResolvableProfile.resolvableProfile(Bukkit.createProfile("ewogICJ0aW1lc3RhbXAiIDogMTczNzU2NjM1MDkxMywKICAicHJvZmlsZUlkIiA6ICIxNzM1MGE5OWQ3MzQ0NDBjYTY0YzJjMDU3YTNjMWM4ZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJHaWxkZWRoZXJvNTY5MSIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS82Y2I2MTE4YjExZTA1NjQ2NmE1YzZjNWRjNWViOTI2Zjc0YTUwZDU2OTQ5YjFjMjM0YWFlYzM5OWQxYTQ4ZGIzIgogICAgfQogIH0KfQ==\",signature:\"F7En1oDPiwMUGdDf2OjBxsV/1p9+xJAOH5VYVu1Qz3OwZd1L2BopYWsp4hRmpKf9rufQJvWf/xH2GM3JysEXC7nQijPZJ5PLI6jjwe7IHw8sVpgNVwN096tOQyl6zmPpxh3bKu3QrDpDjk2RI5qB0WjXcisqNI9obZOVmG8RnWhTFrh0XVKCgBrRNA50q0crOfA25Xo5qy56zIYqjfCEypuLbv+N++qbzt8N4xO/5fKmBtbHoPAqF8dm5ErO5TNK7YwZG0kvfgc52P6cofRhGYVWZxr29MW7OXUPtbb2T9XJ5W88iEDbyWfyc7M0izpSwshV7UXBnDvqKDbkITNCOkZuaDZeqsth00Xz06AITie36ja+QO9N2xl9EAbInBYIkfzyuTOT+79lZbk5yzqSqt0ozcmTJzdXFLO3m2LJVl38ZMHjxLgsQdzYXrlS81ZjBoQrM9Is/kLBJ5CwXzOdwmUp9j5D1DmQUS37oPIHB5wAXOM8p8CcySBA4Ab93sLIs9vJkyteTlOSb4pJJXXLy26nIMywJylUKHcWLZLwy8zEonJxwKo74stijNQoJjusr9TuXItJsTuBFgqUkLzHWma43znAG0uKMfF+OotiDJk3OElt70htxeM3BFhKo0vV7jXMIUAVhgXmHavzzuruHMzG3LA1eLkRI6SOt0opUtU=")))
+    val SPECIAL_EQUIPMENT_KEY = TraitorGamePlugin.key("equipment")
+
+
+    val notebook = ItemStack.of(Material.BOOK).apply {
+        this.setData(DataComponentTypes.ITEM_NAME, Component.text("Notebook"))
+        this.setData(DataComponentTypes.ITEM_MODEL, NamespacedKey.minecraft("writable_book"))
+        this.editPersistentDataContainer { pdc ->
+            pdc.set(SPECIAL_EQUIPMENT_KEY, PersistentDataType.STRING, "notebook")
+        }
+    }
+
+    val detective_crossbow = ItemStack.of(Material.CROSSBOW).apply {
+        this.editMeta { meta ->
+            meta.addEnchant(Enchantment.QUICK_CHARGE, 2, true)
+        }
     }
 
 }

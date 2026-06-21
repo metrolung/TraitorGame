@@ -6,7 +6,10 @@ import org.bukkit.plugin.Plugin
 @JvmRecord
 data class SessionSettings(
     val traitorCount: Int,
+    val detectiveCount: Int,
     val bellLocation: Location,
+
+    val noteCooldownTicks: Int,
 
     val meetingCooldownTicks: Int,
     val discussionTimeTicks: Int,
@@ -21,12 +24,14 @@ data class SessionSettings(
 
 
     companion object {
-        fun create(plugin: Plugin, traitorCount: Int, bellLocation: Location): SessionSettings {
+        fun create(plugin: Plugin, traitorCount: Int, detectiveCount: Int, bellLocation: Location): SessionSettings {
             val config = plugin.config
 
             return SessionSettings(
                 traitorCount,
+                detectiveCount,
                 bellLocation,
+                noteCooldownTicks = (config.getDouble("detective.notebook-cooldown") * 20).toInt(),
                 meetingCooldownTicks = (config.getDouble("gameplay.meeting-cooldown") * 20).toInt(),
                 discussionTimeTicks = (config.getDouble("gameplay.discussion-time") * 20).toInt(),
                 votingTimeTicks = (config.getDouble("gameplay.voting-time") * 20).toInt(),

@@ -9,9 +9,8 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.TitlePart
 import org.bukkit.Color
-import org.bukkit.EntityEffect
+import org.bukkit.NamespacedKey
 import org.bukkit.Server
-import org.bukkit.WorldBorder
 import org.bukkit.entity.Player
 import org.bukkit.entity.TextDisplay
 import org.bukkit.potion.PotionEffect
@@ -47,12 +46,16 @@ class Meeting(
         server.sendTitlePart(TitlePart.TITLE, Component.text("MEETING!").color(TextColor.color(0xFF000C)))
 
         val meetingWorldBorder = server.createWorldBorder()
-        meetingWorldBorder.size = 20.0
+        meetingWorldBorder.size = 21.0
         meetingWorldBorder.center = session.settings.bellLocation.toCenterLocation()
 
         for (player in server.onlinePlayers) {
             player.addPotionEffect(PotionEffect(PotionEffectType.BLINDNESS, 50, 1, false, false, false))
             player.worldBorder = meetingWorldBorder
+        }
+
+        for (player in session.alivePlayers.values) {
+            player.role.onMeetingStart(session, this, player)
         }
 
         session.gatherAroundBell()
@@ -83,7 +86,7 @@ class Meeting(
                     .append(Component
                         .text("[ VOTE ]")
                         .color(TextColor.color(0x00FF00))
-                        .clickEvent(ClickEvent.runCommand("${TraitorGame.commandNamespace}:vote player ${alivePlayer.name}"))
+                        .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:vote player ${alivePlayer.name}"))
                     )
             )
         }
@@ -95,13 +98,13 @@ class Meeting(
             .append(Component
                 .text("[ SKIP ]")
                 .color(TextColor.color(0xFC9835))
-                .clickEvent(ClickEvent.runCommand("${TraitorGame.commandNamespace}:vote skip"))
+                .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:vote skip"))
             )
             .append(Component.text("   |   ").color(TextColor.color(0x888888)))
             .append(Component
                 .text("[ END GAME ]")
                 .color(TextColor.color(0xFF0000))
-                .clickEvent(ClickEvent.runCommand("${TraitorGame.commandNamespace}:vote end"))
+                .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:vote end"))
             )
         )
 
@@ -118,8 +121,8 @@ class Meeting(
             .content("Players")
 
         val commands = mutableListOf(
-            "${TraitorGame.commandNamespace}:vote skip",
-            "${TraitorGame.commandNamespace}:vote end",
+            "${TraitorGamePlugin.namespace}:vote skip",
+            "${TraitorGamePlugin.namespace}:vote end",
         )
 
         for ((_, alivePlayer) in session.alivePlayers) {
@@ -138,7 +141,7 @@ class Meeting(
             } else {
                 form.button(voteText, FormImage.Type.URL, "https://cravatar.eu/head/${alivePlayer.playerUuid}")
             }
-            commands.add("${TraitorGame.commandNamespace}:vote player ${alivePlayer.name}")
+            commands.add("${TraitorGamePlugin.namespace}:vote player ${alivePlayer.name}")
         }
 
         form.validResultHandler { response ->
@@ -162,7 +165,7 @@ class Meeting(
                     Component
                         .text("Return back to your previous location? ")
                         .color(TextColor.color(0xb985fc))
-                        .clickEvent(ClickEvent.runCommand("${TraitorGame.commandNamespace}:back"))
+                        .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:back"))
                         .append(
                             Component
                                 .text("[click]")
@@ -184,7 +187,7 @@ class Meeting(
 
         form.validResultHandler { response ->
             if (response.clickedFirst()) {
-                player.performCommand("${TraitorGame.commandNamespace}:back")
+                player.performCommand("${TraitorGamePlugin.namespace}:back")
             }
         }
 
@@ -276,12 +279,7 @@ class Meeting(
         when (highestVote) {
             is Vote.PlayerVote -> {
                 onMeetingEnd = a@{
-                    val sessionPlayer = session.getSessionPlayer(highestVote.playerUuid) ?: run {
-                        server.sendMessage(
-                            Component.text("You voted out a player who isn't in the game. This shouldn't be possible but whatever")
-                        )
-                        return@a
-                    }
+                    val sessionPlayer = highestVote.player
 
                     val player = sessionPlayer.player
                     if (player == null) {
@@ -297,6 +295,12 @@ class Meeting(
                                         .decorate(TextDecoration.BOLD)
                                 )
                         )
+
+                        server.playSound(Sound.sound {
+                            it.source(Sound.Source.AMBIENT)
+                            it.pitch(1f)
+                            it.type(NamespacedKey.minecraft("ambient.crimson_forest.mood"))
+                        })
 
                         player.clearActivePotionEffects()
                         player.addPotionEffect(
@@ -365,19 +369,19 @@ class Meeting(
         }
 
         for ((_, sessionPlayer) in session.alivePlayers) {
-            if (sessionPlayer.returnLocation == null) {
-                continue
-            }
+            sessionPlayer.role.onMeetingEnd(this.session, this, sessionPlayer)
 
-            sessionPlayer.canReturn = true
+            if (sessionPlayer.returnLocation != null) {
+                sessionPlayer.canReturn = true
 
-            sessionPlayer.player?.let { player ->
-                val bedrockConnection = FloodgateApi.getPlayer(player.uniqueId)
+                sessionPlayer.player?.let { player ->
+                    val bedrockConnection = FloodgateApi.getPlayer(player.uniqueId)
 
-                if (bedrockConnection == null) {
-                    javaBackMenu(player)
-                } else {
-                    bedrockBackMenu(player, bedrockConnection)
+                    if (bedrockConnection == null) {
+                        javaBackMenu(player)
+                    } else {
+                        bedrockBackMenu(player, bedrockConnection)
+                    }
                 }
             }
         }
@@ -411,8 +415,7 @@ class Meeting(
 
         return when (vote) {
             is Vote.PlayerVote -> {
-                val player = session.getSessionPlayer(vote.playerUuid)!!
-                Component.text("You have voted ${player.name}")
+                Component.text("You have voted ${vote.player.name}")
             }
             Vote.Skip ->
                 Component.text("You have voted to skip")

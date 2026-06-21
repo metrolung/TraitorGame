@@ -8,7 +8,7 @@ import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
 import org.bukkit.entity.Player
 
-class VoteCommand(private val plugin: TraitorGame) {
+class VoteCommand(private val plugin: TraitorGamePlugin) {
     fun create(): LiteralArgumentBuilder<CommandSourceStack> {
         return Commands.literal("vote")
             .then(
@@ -45,7 +45,13 @@ class VoteCommand(private val plugin: TraitorGame) {
         }
 
         val voted = executor.server.getOfflinePlayer(playerName)
-        ctx.source.sender.sendMessage(session.onVote(executor, Vote.PlayerVote(voted.uniqueId)))
+
+        val votedSessionPlayer = session.getLivingPlayer(voted.uniqueId) ?: run {
+            ctx.source.sender.sendPlainMessage("Could not find player")
+            return Command.SINGLE_SUCCESS
+        }
+
+        ctx.source.sender.sendMessage(session.onVote(executor, Vote.PlayerVote(votedSessionPlayer)))
 
         return Command.SINGLE_SUCCESS
     }

@@ -9,9 +9,8 @@ import io.papermc.paper.command.brigadier.argument.ArgumentTypes
 import io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver
 import net.kyori.adventure.text.Component
 import org.bukkit.entity.Player
-import java.util.function.Predicate
 
-class RoleCommand(private val plugin: TraitorGame) {
+class RoleCommand(private val plugin: TraitorGamePlugin) {
     fun create(): LiteralArgumentBuilder<CommandSourceStack> {
         return Commands.literal("role")
             .executes { ctx -> this.executeRole(ctx!!) }

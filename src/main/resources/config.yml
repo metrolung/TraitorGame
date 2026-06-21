@@ -6,6 +6,9 @@ gameplay:
   entity-damage-factor: 0.5
   one-player-ends-game: true
 
+detective:
+  notebook-cooldown: 3
+
 chat:
   range: 15
   falloff: 15

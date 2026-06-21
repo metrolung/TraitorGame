@@ -1,5 +1,6 @@
 package io.github.metrolung.traitorgame
 
+import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Location
 import org.bukkit.attribute.Attribute
@@ -16,6 +17,8 @@ val FloodgateApi: FloodgateApi
 val MiniMessage: MiniMessage
     get() = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
 
+
+fun Component.append(s: String) = this.append(Component.text(s))
 
 fun EquipmentSlot.getIndex(player: Player): Int {
     return when (this) {

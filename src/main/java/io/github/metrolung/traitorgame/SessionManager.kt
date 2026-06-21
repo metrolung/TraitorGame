@@ -3,6 +3,7 @@ package io.github.metrolung.traitorgame
 import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent
 import com.destroystokyo.paper.event.server.ServerTickEndEvent
 import io.papermc.paper.event.player.AsyncChatEvent
+import org.bukkit.EntityEffect
 import org.bukkit.Server
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -13,10 +14,12 @@ import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.player.PlayerAdvancementDoneEvent
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerSwapHandItemsEvent
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.plugin.Plugin
 
 class SessionManager : Listener {
@@ -93,13 +96,8 @@ class SessionManager : Listener {
     }
 
     @EventHandler
-    private fun onPlayerSwapHands(event: PlayerSwapHandItemsEvent) {
-        session?.onPlayerSwapHands(event)
-    }
-
-    @EventHandler
-    private fun onInventoryClick(event: InventoryClickEvent) {
-        session?.onInventoryClick(event)
+    private fun onPlayerAdvancement(event: PlayerAdvancementDoneEvent) {
+        session?.onPlayerAdvancement(event)
     }
 
     @EventHandler
@@ -111,9 +109,10 @@ class SessionManager : Listener {
         val player = event.player
 
         session?.let { session ->
-            event.hand?.let { hand ->
-                if (session.onRightClickItem(player, hand.getIndex(player))) {
+            event.item?.let { item ->
+                if (session.onRightClickItem(player, item)) {
                     event.isCancelled = true
+                    player.swingHand(event.hand ?: EquipmentSlot.HAND)
                     return
                 }
             }
@@ -124,6 +123,7 @@ class SessionManager : Listener {
                     clickedBlock.location.toBlockLocation()
                 )) {
                     event.isCancelled = true
+                    player.swingHand(event.hand ?: EquipmentSlot.HAND)
                     return
                 }
             }

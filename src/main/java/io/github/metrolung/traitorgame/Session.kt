@@ -16,6 +16,7 @@ import org.bukkit.EntityEffect
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.Server
 import org.bukkit.entity.Creeper
 import org.bukkit.entity.Display
@@ -27,9 +28,10 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.event.entity.PlayerDeathEvent
-import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.player.PlayerAdvancementDoneEvent
 import org.bukkit.event.player.PlayerDropItemEvent
-import org.bukkit.event.player.PlayerSwapHandItemsEvent
+import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
@@ -70,8 +72,8 @@ class Session(
                 return@List Role.Traitor
             }
 
-            if (i == settings.traitorCount) {
-                return@List Role.Detective
+            if (i < settings.traitorCount + settings.detectiveCount) {
+                return@List Role.Detective()
             }
 
             if (Random.nextDouble() > 0.9)
@@ -99,7 +101,7 @@ class Session(
     }
 
     fun sendBack(player: UUID): TextComponent {
-        val sessionPlayer = getSessionPlayer(player) ?: return Component.text("You are not alive")
+        val sessionPlayer = getLivingPlayer(player) ?: return Component.text("You are not alive")
         val locationPreMeeting = sessionPlayer.returnLocation ?: return Component.text("Nowhere to return to")
 
         if (!sessionPlayer.canReturn) {
@@ -178,10 +180,6 @@ class Session(
             if (player.gameMode == GameMode.SPECTATOR)
                 player.gameMode = GameMode.SURVIVAL
 
-            for ((idx, equipment) in sessionPlayer.role.equipment) {
-                player.inventory.setItem(idx, equipment)
-            }
-
             player.sendTitlePart(
                 TitlePart.TIMES,
                 Title.Times.times(
@@ -200,6 +198,14 @@ class Session(
                 TitlePart.SUBTITLE,
                 Component.text("You are...")
             )
+
+            val sound = Sound.sound {
+                it.source(Sound.Source.AMBIENT)
+//                it.pitch(-f)
+                it.volume(0.8f)
+                it.type(NamespacedKey.minecraft("ambient.soul_sand_valley.mood"))
+            }
+            server.playSound(sound)
 
             server.scheduler.runTaskLater(plugin, { _ ->
                 player.sendTitlePart(
@@ -225,9 +231,27 @@ class Session(
                     sessionPlayer.role.name.decorate(TextDecoration.BOLD)
                 )
 
-                player.sendMessage(Component.text("You are a ").append(sessionPlayer.role.name))
-                player.sendMessage(Component.text("Clear chat with F3 + D"))
-                player.sendMessage(Component.text("You can view your role at any point with /role"))
+                sessionPlayer.player?.stopSound(sound)
+                sessionPlayer.player?.playSound(Sound.sound {
+                    it.source(Sound.Source.PLAYER)
+                    it.type(NamespacedKey.minecraft("entity.evoker.prepare_summon"))
+                })
+
+                sessionPlayer.whenOnline { sessionPlayer, player ->
+                    player.sendMessage(Component.text("You are a ").append(sessionPlayer.role.name))
+                    player.sendMessage(
+                        Component.empty()
+                            .append(Component.text("GOAL").decorate(TextDecoration.BOLD).color(TextColor.color(0xFFFF00)))
+                            .append(": ${sessionPlayer.role.goal}")
+                    )
+
+                    player.sendMessage("")
+
+                    player.sendMessage(Component.text("Clear chat with F3 + D").color(TextColor.color(0x888888)))
+                    player.sendMessage(Component.text("You can view your role at any point with /role").color(TextColor.color(0x888888)))
+
+                    sessionPlayer.role.onRolePresented(this, sessionPlayer)
+                }
             }, 100L)
         }
     }
@@ -267,7 +291,7 @@ class Session(
     }
 
     fun startMeeting() {
-        for (sessionPlayer in mutableAlivePlayers.values) {
+        for (sessionPlayer in alivePlayers.values) {
             sessionPlayer.player?.let { player ->
                 if (playerNearBell(player)) {
                     sessionPlayer.returnLocation = null
@@ -327,14 +351,20 @@ class Session(
         return mutableAlivePlayers.containsKey(player)
     }
 
-    fun getSessionPlayer(player: UUID): SessionPlayer? {
-        return mutableAlivePlayers[player]
+    fun getLivingPlayer(player: UUID): SessionPlayer? {
+        return alivePlayers[player]
     }
 
     fun onPlayerKilled(player: UUID) {
-        mutableAlivePlayers.remove(player)
-        if (mutableAlivePlayers.isEmpty() || (mutableAlivePlayers.size == 1 && settings.onePlayerEndsGame)) {
+        val deadPlayer = mutableAlivePlayers.remove(player)
+        if (alivePlayers.isEmpty() || (alivePlayers.size == 1 && settings.onePlayerEndsGame)) {
             sessionManager.endSession()
+            return
+        }
+
+        if (deadPlayer == null) return
+        for ((_, player) in alivePlayers) {
+            player.role.onPlayerDied(this, player, deadPlayer)
         }
     }
 
@@ -449,7 +479,10 @@ class Session(
                 listener.sendMessage(Component.text("<${player.name}> $message").color(TextColor.color(volume.toFloat(), volume.toFloat(), volume.toFloat())))
             }
         }
+    }
 
+    fun onPlayerAdvancement(event: PlayerAdvancementDoneEvent) {
+        event.message(null)
     }
 
     fun onPlayerDeath(event: PlayerDeathEvent) {
@@ -494,7 +527,7 @@ class Session(
 
     fun onEntityDamageByEntity(event: EntityDamageByEntityEvent) {
         if (event.damage > 1) {
-            getSessionPlayer(event.entity.uniqueId)?.let { sessionPlayer ->
+            getLivingPlayer(event.entity.uniqueId)?.let { sessionPlayer ->
                 if (sessionPlayer.returnLocation != null) {
                     sessionPlayer.canReturn = false
                     sessionPlayer.player?.sendMessage(Component
@@ -517,8 +550,12 @@ class Session(
     }
 
     fun onPlayerJoin(player: Player) {
-        if (!isPlayerAlive(player)) {
+        val sessionPlayer = getLivingPlayer(player.uniqueId)
+
+        if (sessionPlayer == null) {
             applyDeadModifiers(player)
+        } else {
+            sessionPlayer.onlineSessionPlayer!!.doOnlineActions()
         }
     }
 
@@ -529,49 +566,23 @@ class Session(
     }
 
     fun onPlayerDrop(event: PlayerDropItemEvent) {
-        val sessionPlayer: SessionPlayer = mutableAlivePlayers[event.player.uniqueId] ?: run {
-            return
-        }
-
-        if (sessionPlayer.role.equipment.containsKey(event.player.inventory.heldItemSlot)) {
+        if (event.itemDrop.itemStack.persistentDataContainer.has(ItemStacks.SPECIAL_EQUIPMENT_KEY)) {
             event.isCancelled = true
         }
     }
 
-    fun onPlayerSwapHands(event: PlayerSwapHandItemsEvent) {
-        val sessionPlayer: SessionPlayer = mutableAlivePlayers[event.player.uniqueId] ?: run {
-            return
-        }
 
-        if (
-            sessionPlayer.role.equipment.containsKey(event.player.inventory.heldItemSlot) ||
-            sessionPlayer.role.equipment.containsKey(40)
-        ) {
-            event.isCancelled = true
-        }
-    }
-
-    fun onInventoryClick(event: InventoryClickEvent) {
-        val player = event.whoClicked as? Player ?: run {
-            return
-        }
-
-        val sessionPlayer: SessionPlayer = mutableAlivePlayers[player.uniqueId] ?: run {
-            return
-        }
-
-        if (sessionPlayer.role.equipment.containsKey(event.slot) || sessionPlayer.role.equipment.containsKey(event.rawSlot)) {
-            event.isCancelled = true
-        }
-    }
-
-    fun onRightClickItem(player: Player, slot: Int): Boolean {
+    fun onRightClickItem(player: Player, item: ItemStack): Boolean {
         val sessionPlayer: SessionPlayer = mutableAlivePlayers[player.uniqueId] ?: run {
             return false
         }
 
-        if (sessionPlayer.role.equipment.containsKey(slot)) {
-            sessionPlayer.role.handleEquipmentInteraction(sessionPlayer, slot)
+        val equipmentType = item.persistentDataContainer.get(
+            ItemStacks.SPECIAL_EQUIPMENT_KEY,
+            PersistentDataType.STRING
+        )
+        if (equipmentType != null) {
+            sessionPlayer.role.handleEquipmentUse(this, sessionPlayer.onlineSessionPlayer!!, item, equipmentType)
             return true
         }
 
@@ -607,7 +618,7 @@ class Session(
             return Component.text("Voter is not alive")
         }
 
-        if (vote is Vote.PlayerVote && !isPlayerAlive(vote.playerUuid)) {
+        if (vote is Vote.PlayerVote && !isPlayerAlive(vote.player)) {
             return Component.text("Voted is not alive")
         }
 
