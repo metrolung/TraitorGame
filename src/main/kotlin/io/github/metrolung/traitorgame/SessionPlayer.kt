@@ -1,5 +1,6 @@
 package io.github.metrolung.traitorgame
 
+import io.github.metrolung.traitorgame.role.Role
 import org.bukkit.Location
 import org.bukkit.Server
 import org.bukkit.entity.Player

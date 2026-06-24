@@ -1,12 +1,11 @@
-package io.github.metrolung.traitorgame
+package io.github.metrolung.traitorgame.commands
 
 import com.mojang.brigadier.Command
-import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
+import io.github.metrolung.traitorgame.MiniMessage
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
-import org.bukkit.entity.Player
 
 object HowToPlayCommand {
     fun create(): LiteralArgumentBuilder<CommandSourceStack> {
@@ -15,7 +14,8 @@ object HowToPlayCommand {
     }
 
     private fun execute(ctx: CommandContext<CommandSourceStack>): Int {
-        ctx.source.executor?.sendMessage(MiniMessage.deserialize("""
+        ctx.source.executor?.sendMessage(
+            MiniMessage.deserialize("""
             
             <b>HOW TO PLAY:</b>
             It's a social deduction game. There's traitors and there are survivors.
@@ -26,6 +26,9 @@ object HowToPlayCommand {
             - Only 1 player alive
             - Players vote to end the game
             - The enderdragon is defeated (guaranteed survivor win)
+            
+            <b>OTHER STUFF</b>
+            - Crouch near a body to drag it
             
         """.trimIndent()))
 

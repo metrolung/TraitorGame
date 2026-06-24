@@ -4,11 +4,9 @@ import net.kyori.adventure.key.Key
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.event.ClickEvent
-import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.TitlePart
-import org.bukkit.Color
 import org.bukkit.NamespacedKey
 import org.bukkit.Server
 import org.bukkit.entity.Player
@@ -37,13 +35,14 @@ class Meeting(
     val votes: MutableMap<UUID, Vote> = mutableMapOf()
 
     private var onMeetingEnd = {}
+    private var turnout: MutableMap<Vote, Int>? = null
 
     fun startMeeting() {
         server.sendTitlePart(
             TitlePart.TIMES,
             Title.Times.times(Duration.ZERO, Duration.ofSeconds(2), Duration.ofMillis(500))
         )
-        server.sendTitlePart(TitlePart.TITLE, Component.text("MEETING!").color(TextColor.color(0xFF000C)))
+        server.sendTitlePart(TitlePart.TITLE, Component.text("MEETING!").color(Colors.VERY_RED.textColor))
 
         val meetingWorldBorder = server.createWorldBorder()
         meetingWorldBorder.size = 21.0
@@ -74,18 +73,18 @@ class Meeting(
                 Component.empty()
                     .append(Component
                         .text("→ ")
-                        .color(TextColor.color(0x888888))
+                        .color(Colors.LIGHT_GRAY.textColor)
                     )
                     .append(Component
                         .text(alivePlayer.name)
                     )
                     .append(Component
                         .text(" - ")
-                        .color(TextColor.color(0x888888))
+                        .color(Colors.LIGHT_GRAY.textColor)
                     )
                     .append(Component
                         .text("[ VOTE ]")
-                        .color(TextColor.color(0x00FF00))
+                        .color(Colors.VERY_GREEN.textColor)
                         .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:vote player ${alivePlayer.name}"))
                     )
             )
@@ -97,13 +96,13 @@ class Meeting(
             .empty()
             .append(Component
                 .text("[ SKIP ]")
-                .color(TextColor.color(0xFC9835))
+                .color(Colors.ORANGE.textColor)
                 .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:vote skip"))
             )
-            .append(Component.text("   |   ").color(TextColor.color(0x888888)))
+            .append(Component.text("   |   ").color(Colors.LIGHT_GRAY.textColor))
             .append(Component
                 .text("[ END GAME ]")
-                .color(TextColor.color(0xFF0000))
+                .color(Colors.VERY_RED.textColor)
                 .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:vote end"))
             )
         )
@@ -151,7 +150,7 @@ class Meeting(
         }
 
         form.closedOrInvalidResultHandler { ->
-            player.sendMessage(Component.text("Click the bell to vote!").color(TextColor.color(0xFFFF00)))
+            player.sendMessage(Component.text("Click the bell to vote!").color(Colors.VERY_YELLOW.textColor))
         }
 
         connection.sendForm(form)
@@ -164,12 +163,12 @@ class Meeting(
                 .append(
                     Component
                         .text("Return back to your previous location? ")
-                        .color(TextColor.color(0xb985fc))
+                        .color(Colors.LAVENDER.textColor)
                         .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:back"))
                         .append(
                             Component
                                 .text("[click]")
-                                .color(TextColor.color(0x555555))
+                                .color(Colors.DARK_GRAY.textColor)
                         )
                 )
         )
@@ -195,11 +194,11 @@ class Meeting(
             player.sendMessage(
                 Component
                     .text("Return back to your previous location with ")
-                    .color(TextColor.color(0xb985fc))
+                    .color(Colors.LAVENDER.textColor)
                     .append(
                         Component
                             .text("/back")
-                            .color(TextColor.color(0x555555))
+                            .color(Colors.DARK_GRAY.textColor)
                     )
             )
         }
@@ -243,13 +242,15 @@ class Meeting(
         this.state = State.Suspense
         this.timing = 50
 
-        server.sendMessage(Component.text("The votes have been cast....").color(TextColor.color(0xFFFF00)))
+        server.sendMessage(Component.text("The votes have been cast....").color(Colors.VERY_YELLOW.textColor))
 
-        val voteCounts: MutableMap<Vote, Int> = mutableMapOf()
+        val turnout: MutableMap<Vote, Int> = mutableMapOf()
 
         for (vote in votes.values) {
-            voteCounts[vote] = voteCounts.getOrDefault(vote, 0) + 1
+            turnout[vote] = turnout.getOrDefault(vote, 0) + 1
         }
+
+        this.turnout = turnout
 
         session.gracePeriod()
 
@@ -257,7 +258,7 @@ class Meeting(
         var highestVoteCount = 0
         var tied = true
 
-        for (entry in voteCounts.entries) {
+        for (entry in turnout.entries) {
             if (highestVote == null) {
                 highestVote = entry.key
                 highestVoteCount = entry.value
@@ -284,14 +285,14 @@ class Meeting(
                     val player = sessionPlayer.player
                     if (player == null) {
                         server.sendMessage(Component.text("${sessionPlayer.name} has been voted. "))
-                        session.onPlayerKilled(sessionPlayer)
+                        session.onPlayerKilled(sessionPlayer, mutableListOf(), "Voted", mutableMapOf())
                     } else {
                         server.sendMessage(
                             Component.text("${sessionPlayer.name} has been voted. ")
                                 .append(
                                     Component
                                         .text("FINISH THEM!!!")
-                                        .color(TextColor.color(0xFF0000))
+                                        .color(Colors.VERY_RED.textColor)
                                         .decorate(TextDecoration.BOLD)
                                 )
                         )
@@ -338,7 +339,6 @@ class Meeting(
                         player.health = 5.0
                         player.foodLevel = min(player.foodLevel, 10)
                         sessionPlayer.returnLocation = null
-
                     }
                 }
             }
@@ -369,7 +369,7 @@ class Meeting(
         }
 
         for ((_, sessionPlayer) in session.alivePlayers) {
-            sessionPlayer.role.onMeetingEnd(this.session, this, sessionPlayer)
+            sessionPlayer.role.onMeetingEnd(this.session, this, sessionPlayer, turnout ?: mapOf())
 
             if (sessionPlayer.returnLocation != null) {
                 sessionPlayer.canReturn = true
@@ -405,7 +405,7 @@ class Meeting(
                 .append(
                     Component
                         .text("[${votes.size}/${session.alivePlayers.size}]")
-                        .color(TextColor.color(0x888888))
+                        .color(Colors.LIGHT_GRAY.textColor)
                 )
         )
 
@@ -434,9 +434,9 @@ class Meeting(
                 bellLabel.text(
                     Component
                         .text("Voting starts in ${seconds.seconds}")
-                        .color(TextColor.color(0, 200, 200))
+                        .color(Colors.SURVIVOR_TEAL.textColor)
                 )
-                bellLabel.backgroundColor = Color.fromARGB(100, 0, 20, 20)
+                bellLabel.backgroundColor = Colors.MIDNIGHT_CYAN.color(100)
                 bellLabel.transformation = Transformation()
 
                 if (timing <= 0) {
@@ -450,9 +450,9 @@ class Meeting(
                 bellLabel.text(
                     Component
                         .text("Voting ends in ${seconds.seconds}")
-                        .color(TextColor.color(0, 200, 200))
+                        .color(Colors.SURVIVOR_TEAL.textColor)
                 )
-                bellLabel.backgroundColor = Color.fromARGB(100, 0, 20, 20)
+                bellLabel.backgroundColor = Colors.MIDNIGHT_CYAN.color(100)
                 bellLabel.transformation = Transformation()
 
                 if (timing <= 0) {

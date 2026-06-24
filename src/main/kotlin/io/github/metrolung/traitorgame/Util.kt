@@ -1,6 +1,8 @@
 package io.github.metrolung.traitorgame
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.TextComponent
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Location
 import org.bukkit.attribute.Attribute
@@ -11,12 +13,20 @@ import org.geysermc.floodgate.api.FloodgateApi
 import org.joml.AxisAngle4f
 import org.joml.Vector3f
 
+
+val INTERACTION_PASSTHROUGH_KEY = TraitorGamePlugin.key("passthrough")
+
 val FloodgateApi: FloodgateApi
     get() = org.geysermc.floodgate.api.FloodgateApi.getInstance()
 
 val MiniMessage: MiniMessage
     get() = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
 
+val String.component: TextComponent
+    get() = Component.text(this)
+
+fun String.colored(color: TextColor) = Component.text(this, color)
+fun String.colored(color: Int) = Component.text(this, TextColor.color(color))
 
 fun Component.append(s: String) = this.append(Component.text(s))
 

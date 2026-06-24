@@ -1,51 +1,57 @@
-package io.github.metrolung.traitorgame
+package io.github.metrolung.traitorgame.commands
 
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
+import io.github.metrolung.traitorgame.SessionSettings
+import io.github.metrolung.traitorgame.TraitorGamePlugin
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
 import org.bukkit.entity.Player
-import kotlin.math.ceil
 
 class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
     fun create(): LiteralArgumentBuilder<CommandSourceStack> {
         return Commands.literal("traitorgame")
             .requires { source -> source.sender.isOp }
-            .then(Commands.literal("start")
-                .executes { ctx -> this.executeStart(
-                    ctx,
-                    null,
-                    null
-                ) }
-                .then(Commands.argument("traitorcount", IntegerArgumentType.integer(0))
-                    .executes { ctx -> this.executeStart(
-                        ctx,
-                        ctx.getArgument("traitorcount", Int::class.javaPrimitiveType),
-                        null
-                    ) }
-                    .then(Commands.argument("detectivecount", IntegerArgumentType.integer(0))
-                        .executes { ctx -> this.executeStart(
-                            ctx,
-                            ctx.getArgument("traitorcount", Int::class.javaPrimitiveType),
-                            ctx.getArgument("detectivecount", Int::class.javaPrimitiveType),
-                        ) }
+            .then(
+                Commands.literal("start")
+                .then(
+                    Commands.argument("traitorcount", IntegerArgumentType.integer(0))
+                    .then(
+                        Commands.argument("detectivecount", IntegerArgumentType.integer(0))
+                        .then(
+                            Commands.argument("neutralcount", IntegerArgumentType.integer(0))
+                            .executes { ctx -> this.executeStart(
+                                ctx,
+                                ctx.getArgument("traitorcount", Int::class.javaPrimitiveType),
+                                ctx.getArgument("detectivecount", Int::class.javaPrimitiveType),
+                                ctx.getArgument("neutralcount", Int::class.javaPrimitiveType),
+                            ) }
+                        )
                     )
                 )
             )
-            .then(Commands.literal("end")
+            .then(
+                Commands.literal("end")
                 .executes { ctx -> this.executeEnd(ctx) }
             )
-            .then(Commands.literal("forcemeeting")
+            .then(
+                Commands.literal("forcemeeting")
                 .executes { ctx -> this.executeForceMeeting(ctx) }
             )
-            .then(Commands.literal("result")
+            .then(
+                Commands.literal("result")
                 .executes { ctx -> this.executeResult(ctx) }
             )
     }
 
-    private fun executeStart(ctx: CommandContext<CommandSourceStack>, traitorCount: Int?, detectiveCount: Int?): Int {
+    private fun executeStart(
+        ctx: CommandContext<CommandSourceStack>,
+        traitorCount: Int,
+        detectiveCount: Int,
+        neutralCount: Int
+    ): Int {
         if (plugin.sessionManager.isSessionActive) {
             ctx.source.sender.sendPlainMessage("Session currently active")
             return Command.SINGLE_SUCCESS
@@ -54,8 +60,9 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
         plugin.sessionManager.startSession(
             plugin.server, plugin, SessionSettings.create(
                 plugin,
-                traitorCount ?: ceil(ctx.source.sender.server.onlinePlayers.size.div(6.0)).toInt(),
-                detectiveCount ?: 1,
+                traitorCount,
+                detectiveCount,
+                neutralCount,
                 ctx.source.location.toBlockLocation()
             )
         )

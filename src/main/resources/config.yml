@@ -1,10 +1,9 @@
 
 gameplay:
   meeting-cooldown: 120
-  discussion-time: 60
+  discussion-time: 30
   voting-time: 90
-  entity-damage-factor: 0.5
-  one-player-ends-game: true
+  entity-damage-factor: 0.35
 
 detective:
   notebook-cooldown: 3

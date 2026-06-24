@@ -3,24 +3,29 @@ package io.github.metrolung.traitorgame
 import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent
 import com.destroystokyo.paper.event.server.ServerTickEndEvent
 import io.papermc.paper.event.player.AsyncChatEvent
-import org.bukkit.EntityEffect
 import org.bukkit.Server
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockExplodeEvent
+import org.bukkit.event.block.BlockPistonExtendEvent
+import org.bukkit.event.entity.EntityChangeBlockEvent
 import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDeathEvent
+import org.bukkit.event.entity.EntityExplodeEvent
+import org.bukkit.event.entity.ItemDespawnEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.player.PlayerAdvancementDoneEvent
 import org.bukkit.event.player.PlayerDropItemEvent
+import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerJoinEvent
-import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.inventory.EquipmentSlot
+import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
+import java.util.UUID
 
 class SessionManager : Listener {
     var oldSession: Session? = null
@@ -76,6 +81,11 @@ class SessionManager : Listener {
     }
 
     @EventHandler
+    private fun onItemDespawn(event: ItemDespawnEvent) {
+        session?.onItemDespawn(event)
+    }
+
+    @EventHandler
     private fun onEntityTakeDamage(event: EntityDamageEvent) {
         session?.onEntityTakeDamage(event)
     }
@@ -101,6 +111,45 @@ class SessionManager : Listener {
     }
 
     @EventHandler
+    private fun onInventoryClicked(event: InventoryClickEvent) {
+        session?.onInventoryClickEvent(event)
+    }
+
+    @EventHandler
+    fun onPlayerInteractEntity(event: PlayerInteractEntityEvent) {
+        val player = event.player
+
+        val passthrough = event.rightClicked.persistentDataContainer.get(INTERACTION_PASSTHROUGH_KEY, PersistentDataType.STRING)
+        if (passthrough != null) {
+            val entity = player.server.getEntity(UUID.fromString(passthrough))
+
+            if (entity != null) {
+                val passthroughEvent = PlayerInteractEntityEvent(
+                    player,
+                    entity,
+                    event.hand
+                )
+                player.server.pluginManager.callEvent(passthroughEvent)
+                event.isCancelled = passthroughEvent.isCancelled
+
+                return
+            }
+        }
+
+        session?.let { session ->
+            if (session.onPlayerRightClickEntity(
+                player,
+                player.inventory.getItem(event.hand),
+                event.hand,
+                event.rightClicked
+            )) {
+                event.isCancelled = true
+                return
+            }
+        }
+    }
+
+    @EventHandler
     fun onPlayerInteract(event: PlayerInteractEvent) {
         if (!event.action.isRightClick) {
             return
@@ -109,21 +158,21 @@ class SessionManager : Listener {
         val player = event.player
 
         session?.let { session ->
-            event.item?.let { item ->
-                if (session.onRightClickItem(player, item)) {
+            event.clickedBlock?.let { clickedBlock ->
+                if (session.onPlayerRightClickBlock(
+                    player,
+                    event.item,
+                    clickedBlock.location.toBlockLocation(),
+                    event.hand ?: EquipmentSlot.HAND
+                )) {
                     event.isCancelled = true
-                    player.swingHand(event.hand ?: EquipmentSlot.HAND)
                     return
                 }
             }
 
-            event.clickedBlock?.let { clickedBlock ->
-                if (session.onPlayerRightClickBlock(
-                    event.getPlayer(),
-                    clickedBlock.location.toBlockLocation()
-                )) {
+            event.item?.let { item ->
+                if (session.onRightClickItem(player, item, event.hand ?: EquipmentSlot.HAND)) {
                     event.isCancelled = true
-                    player.swingHand(event.hand ?: EquipmentSlot.HAND)
                     return
                 }
             }
@@ -133,17 +182,44 @@ class SessionManager : Listener {
     @EventHandler
     private fun onBlockBroken(event: BlockBreakEvent) {
         session?.let { session ->
-            if (session.onBlockRemoved(event.block.location.toBlockLocation())) {
+            if (!session.blockCanBeChanged(event.block.location.toBlockLocation())) {
                 event.isCancelled = true
             }
         }
     }
 
     @EventHandler
-    private fun onBlockBroken(event: BlockExplodeEvent) {
+    private fun onEntityChangeBlock(event: EntityChangeBlockEvent) {
         session?.let { session ->
-            if (session.onBlockRemoved(event.block.location.toBlockLocation())) {
+            if (!session.blockCanBeChanged(event.block.location.toBlockLocation())) {
                 event.isCancelled = true
+            }
+        }
+    }
+
+    @EventHandler
+    private fun onPistonExtend(event: BlockPistonExtendEvent) {
+        session?.let { session ->
+            if (event.blocks.any { !session.blockCanBeChanged(it.location) }) {
+                event.isCancelled = true
+            }
+        }
+    }
+
+    @EventHandler
+    private fun onEntityExploded(event: EntityExplodeEvent) {
+        session?.let { session ->
+            event.blockList().removeAll {
+                !session.blockCanBeChanged(it.location)
+            }
+        }
+    }
+
+    @EventHandler
+    private fun onBlockExploded(event: BlockExplodeEvent) {
+        session?.let { session ->
+            event.blockList().removeAll {
+                !session.blockCanBeChanged(it.location)
             }
         }
     }
