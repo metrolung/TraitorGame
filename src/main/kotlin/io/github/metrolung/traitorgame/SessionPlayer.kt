@@ -7,7 +7,7 @@ import org.bukkit.entity.Player
 import java.util.*
 
 data class SessionPlayer(
-    val playerUuid: UUID,
+    val uniqueId: UUID,
     val name: String,
     val role: Role,
     val server: Server
@@ -17,7 +17,7 @@ data class SessionPlayer(
     var canReturn: Boolean = false
 
     val player: Player?
-        get() = server.getPlayer(playerUuid)
+        get() = server.getPlayer(uniqueId)
 
     val onlineSessionPlayer: OnlineSessionPlayer?
         get() = player?.let { player -> OnlineSessionPlayer(player, this) }
@@ -46,8 +46,8 @@ data class SessionPlayer(
 }
 
 data class OnlineSessionPlayer(val player: Player, val sessionPlayer: SessionPlayer) {
-    val playerUuid: UUID
-        get() = sessionPlayer.playerUuid
+    val uniqueId: UUID
+        get() = sessionPlayer.uniqueId
     val name: String
         get() = sessionPlayer.name
     val role: Role

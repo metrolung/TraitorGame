@@ -4,6 +4,7 @@ import com.mojang.brigadier.Command
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
 import io.github.metrolung.traitorgame.TraitorGamePlugin
+import io.github.metrolung.traitorgame.component
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes
@@ -45,11 +46,14 @@ class RoleCommand(private val plugin: TraitorGamePlugin) {
         }
 
         source.sender.sendMessage(
-            player.name().append(
-                Component.text(" has role: ").append(
-                    role.stylized
-                )
-            )
+            Component.text {
+                it.append(player.name())
+                it.append(" has role: ".component)
+                it.append(role.stylized)
+                it.append(" [".component)
+                it.append(role.type.stylized)
+                it.append("]".component)
+            }
         )
 
         return Command.SINGLE_SUCCESS

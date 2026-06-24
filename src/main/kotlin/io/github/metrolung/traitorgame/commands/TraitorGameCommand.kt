@@ -19,16 +19,12 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
                 .then(
                     Commands.argument("traitorcount", IntegerArgumentType.integer(0))
                     .then(
-                        Commands.argument("detectivecount", IntegerArgumentType.integer(0))
-                        .then(
-                            Commands.argument("neutralcount", IntegerArgumentType.integer(0))
+                        Commands.argument("neutralcount", IntegerArgumentType.integer(0))
                             .executes { ctx -> this.executeStart(
                                 ctx,
                                 ctx.getArgument("traitorcount", Int::class.javaPrimitiveType),
-                                ctx.getArgument("detectivecount", Int::class.javaPrimitiveType),
                                 ctx.getArgument("neutralcount", Int::class.javaPrimitiveType),
                             ) }
-                        )
                     )
                 )
             )
@@ -44,12 +40,15 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
                 Commands.literal("result")
                 .executes { ctx -> this.executeResult(ctx) }
             )
+            .then(
+                Commands.literal("reloadconfigs")
+                    .executes { ctx -> this.executeReloadConfigs(ctx) }
+            )
     }
 
     private fun executeStart(
         ctx: CommandContext<CommandSourceStack>,
         traitorCount: Int,
-        detectiveCount: Int,
         neutralCount: Int
     ): Int {
         if (plugin.sessionManager.isSessionActive) {
@@ -61,7 +60,6 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
             plugin.server, plugin, SessionSettings.create(
                 plugin,
                 traitorCount,
-                detectiveCount,
                 neutralCount,
                 ctx.source.location.toBlockLocation()
             )
@@ -72,6 +70,12 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
 
     private fun executeEnd(ctx: CommandContext<CommandSourceStack>): Int {
         plugin.sessionManager.endSession()
+
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun executeReloadConfigs(ctx: CommandContext<CommandSourceStack>): Int {
+        plugin.reloadConfig()
 
         return Command.SINGLE_SUCCESS
     }

@@ -12,9 +12,6 @@ import io.github.metrolung.traitorgame.role.Traitor
 
 
 object DefaultTraitor : Traitor {
-    override val roleColor: Int
-        get() = Colors.TRAITOR_RED
-
     override val name: String
         get() = "Traitor"
 
@@ -27,6 +24,6 @@ object DefaultTraitor : Traitor {
     }
 
     override fun onRolePresented(session: Session, sessionPlayer: OnlineSessionPlayer) {
-        sessionPlayer.player.inventory.setItem(9, ItemStacks.manifesto)
+        sessionPlayer.player.inventory.setItem(9, ItemStacks.manifesto(session.settings.roleSettings.traitorCodeWord))
     }
 }

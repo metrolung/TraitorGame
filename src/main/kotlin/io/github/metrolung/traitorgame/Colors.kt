@@ -18,8 +18,13 @@ object Colors {
     const val TRAITOR_RED = 0xEA0941
     const val DETECTIVE_BLUE = 0x1E41ED
     const val SURVIVOR_TEAL = 0x01FFCC
-    const val MOGUL_ORANGE = 0xFCB21E
+    const val NEUTRAL_YELLOW = 0xF9D41B
+    const val JESTER_PEACH = 0xFC7550
+    const val ASTRAL_PURPLE = 0xA94BFC
 
+
+
+    const val DRAGON_PURPLE = 0xBD58FC
 
     const val MIDNIGHT_CYAN = 0x001A1A
     const val MIDNIGHT_GREEN = 0x001A00

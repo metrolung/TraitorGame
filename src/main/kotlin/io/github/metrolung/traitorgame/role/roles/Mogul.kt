@@ -7,41 +7,45 @@ import io.github.metrolung.traitorgame.ItemStacks
 import io.github.metrolung.traitorgame.OnlineSessionPlayer
 import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.SessionPlayer
+import io.github.metrolung.traitorgame.TraitorGamePlugin
 import io.github.metrolung.traitorgame.colored
 import io.github.metrolung.traitorgame.component
 import io.github.metrolung.traitorgame.role.Neutral
-import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.role.RoleSettings
+import io.papermc.paper.datacomponent.DataComponentTypes
+import io.papermc.paper.datacomponent.item.PotionContents
+import net.kyori.adventure.key.Key
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.event.inventory.InventoryAction
+import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
-import org.bukkit.inventory.meta.PotionMeta
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
+import org.bukkit.potion.PotionType
 import kotlin.math.min
 import kotlin.random.Random
 
 class Mogul : Neutral {
-    override val roleColor: Int
-        get() = Colors.MOGUL_ORANGE
-
     override val name: String
         get() = "Mogul"
 
+    override val isEvil: Boolean
+        get() = false
+
     override fun isWinner(session: Session, sessionPlayer: SessionPlayer, endGameReason: EndGameReason): Boolean {
-        if (totalCash > session.settings.roleSettings.blackMarketeerMoneyGoal) {
+        if (totalCash > session.settings.roleSettings.mogulMoneyGoal) {
             return true
         }
         return super.isWinner(session, sessionPlayer, endGameReason)
     }
 
     override fun getGoal(roleSettings: RoleSettings): String {
-        return "You have no allegiances. Collect $${roleSettings.blackMarketeerMoneyGoal / 100.0} to win."
+        return "You have no allegiances. Collect $${roleSettings.mogulMoneyGoal / 100.0} to win."
     }
 
     var totalCash = 0L
@@ -52,40 +56,53 @@ class Mogul : Neutral {
         possibleMerchandise.random().random()
     }
 
-    override fun handleEquipmentInventoryClick(
+    private fun valueOf(stack: ItemStack): Long? = when (stack.type) {
+        Material.AMETHYST_SHARD -> 1
+        Material.COPPER_NUGGET -> 1
+
+        Material.LAPIS_LAZULI -> 5
+        Material.LAPIS_BLOCK -> 45
+
+        Material.COPPER_INGOT -> 10
+        Material.COPPER_BLOCK -> 90
+
+        Material.GOLD_NUGGET -> 50
+        Material.COAL -> 50
+        Material.COAL_BLOCK -> 4_50
+
+        Material.EMERALD -> 1_00
+        Material.EMERALD_BLOCK -> 9_00
+        Material.IRON_NUGGET -> 1_00
+
+        Material.GOLD_INGOT -> 5_00
+        Material.GOLD_BLOCK -> 45_00
+        Material.IRON_INGOT -> 10_00
+        Material.IRON_BLOCK -> 90_00
+        Material.DIAMOND -> 40_00
+        Material.DIAMOND_BLOCK -> 360_00
+        Material.NETHERITE_INGOT -> 250_00
+        Material.NETHERITE_BLOCK -> 2250_00
+
+        else -> null
+    }
+
+
+    override fun handleInventoryClick(
         session: Session,
         sessionPlayer: OnlineSessionPlayer,
-        itemStack: ItemStack,
-        equipmentType: String,
+        itemStack: ItemStack?,
+        cursor: ItemStack?,
+        guiHolder: GuiHolder?,
+        slot: Int,
         action: InventoryAction
     ): Boolean {
-        when (equipmentType) {
-            "money_bag" -> {
-                val cursor = sessionPlayer.player.itemOnCursor
-                val value = when (cursor.type) {
-                    Material.AMETHYST_SHARD -> 1
-                    Material.COPPER_NUGGET -> 1
+        if (guiHolder is MerchandiseBoxMenu) {
+            if (action == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+                val itemStack = itemStack ?: return true
+                val value = valueOf(itemStack) ?: return true
 
-                    Material.LAPIS_LAZULI -> 5
-
-                    Material.COPPER_INGOT -> 10
-
-                    Material.GOLD_NUGGET -> 50
-                    Material.COAL -> 50
-
-                    Material.EMERALD -> 1_00
-                    Material.IRON_NUGGET -> 1_00
-
-                    Material.GOLD_INGOT -> 5_00
-                    Material.IRON_INGOT -> 10_00
-                    Material.DIAMOND -> 40_00
-                    Material.NETHERITE_INGOT -> 250_00
-
-                    else -> return true
-                }
-
-                sessionPlayer.player.setItemOnCursor(null)
-                for (i in 0..<cursor.amount) {
+                sessionPlayer.player.inventory.setItem(slot, null)
+                for (i in 0..<itemStack.amount) {
                     session.server.scheduler.runTaskLater(session.plugin, { _ ->
                         totalCash += value
                         recentCash += value
@@ -100,20 +117,44 @@ class Mogul : Neutral {
                 return true
             }
         }
-        return super.handleEquipmentInventoryClick(session, sessionPlayer, itemStack, equipmentType, action)
+
+        return super.handleInventoryClick(session, sessionPlayer, itemStack, cursor, guiHolder, slot, action)
     }
 
     override fun handleGuiClick(
         session: Session,
         sessionPlayer: OnlineSessionPlayer,
-        itemStack: ItemStack,
+        itemStack: ItemStack?,
+        cursor: ItemStack?,
         guiHolder: GuiHolder,
+        slot: Int,
         action: InventoryAction
     ): Boolean {
-        if (guiHolder === boxMenu) {
-            val index = itemStack.persistentDataContainer.get(ItemStacks.MERCHANDISE_INDEX_KEY, PersistentDataType.INTEGER) ?: return true
+        if (guiHolder is MerchandiseBoxMenu) {
+            if (slot == 13) {
+                val cursor = sessionPlayer.player.itemOnCursor
+                val value = valueOf(cursor) ?: return true
+
+                sessionPlayer.player.setItemOnCursor(null)
+
+                for (i in 0..<cursor.amount) {
+                    session.server.scheduler.runTaskLater(session.plugin, { _ ->
+                        totalCash += value
+                        recentCash += value
+
+                        sessionPlayer.player.playSound(Sound.sound {
+                            it.source(Sound.Source.PLAYER)
+                            it.type(NamespacedKey.minecraft("block.note_block.bell"))
+                        })
+                    }, i.toLong())
+                }
+
+                return true
+            }
+
+
+            val index = itemStack?.persistentDataContainer?.get(ItemStacks.MERCHANDISE_INDEX_KEY, PersistentDataType.INTEGER) ?: return true
             if (meansToDoThis != index) {
-                sessionPlayer.player.sendMessage("Do you really mean to do this? Drop the item again to confirm.".colored(Colors.VERY_RED))
                 meansToDoThis = index
                 return true
             }
@@ -121,28 +162,19 @@ class Mogul : Neutral {
 
             val merchandise = merchandiseList[index] ?: return true
             merchandiseList[index] = null
+            boxMenu.update(session)
 
-            sessionPlayer.player.dropItem(merchandise.itemProvider())
+            val dropped = sessionPlayer.player.dropItem(merchandise.itemProvider()) ?: return true
+            dropped.persistentDataContainer.set(TraitorGamePlugin.key("cannot_pickup"), PersistentDataType.STRING, sessionPlayer.uniqueId.toString())
 
             return true
         }
 
-        return super.handleGuiClick(session, sessionPlayer, itemStack, guiHolder, action)
+        return super.handleGuiClick(session, sessionPlayer, itemStack, cursor, guiHolder, slot, action)
     }
 
     override fun onRolePresented(session: Session, sessionPlayer: OnlineSessionPlayer) {
-//        for (slot in 9..16) {
-//            val group = Random.nextInt(0, possibleMerchandise.size)
-//            val index = Random.nextInt(0, possibleMerchandise[group].size)
-//
-//            val merchandise = possibleMerchandise[group][index]
-//            val material = merchandise.itemProvider().type
-//            val name = merchandise.name
-//
-//            sessionPlayer.player.inventory.setItem(slot, ItemStacks.merchandise(name, material, group, index, slot))
-//        }
-//        sessionPlayer.player.inventory.setItem(17, ItemStacks.moneyBag)
-        sessionPlayer.player.give(ItemStacks.merchandise_box)
+        sessionPlayer.player.give(ItemStacks.merchandiseBox)
     }
 
     override fun handleEquipmentUse(
@@ -154,82 +186,114 @@ class Mogul : Neutral {
     ): Boolean {
         when (equipmentType) {
             "merchandise_box" -> {
+                boxMenu.update(session)
                 sessionPlayer.player.openInventory(boxMenu.inventory)
+                return true
             }
         }
 
         return super.handleEquipmentUse(session, sessionPlayer, itemStack, equipmentType, block)
     }
 
-    override fun onTickOnline(session: Session, sessionPlayer: OnlineSessionPlayer) {
+    override fun onTickOnline(session: Session, sessionPlayer: OnlineSessionPlayer, tick: Int) {
         if (!session.roleShown) {
             return
         }
 
         sessionPlayer.player.sendActionBar(
             Component.text {
-                it.append("$${totalCash/100.0}".colored(Colors.VERY_YELLOW))
-                it.append(" (recent: $${recentCash/100.0})".colored(Colors.MID_GRAY))
+                it.append("$${String.format("%.2f", totalCash/100.0)}".colored(Colors.VERY_YELLOW))
+                it.append(" (recent: $${String.format("%.2f", recentCash/100.0)})".colored(Colors.MID_GRAY))
             }
         )
     }
 
     companion object {
-        data class Merchandise(val name: Component, val itemProvider: () -> ItemStack)
+        data class Merchandise(val name: Component, val amount: Int = 1, val itemProvider: () -> ItemStack)
 
         private val arrows = listOf(
             ItemStack.of(Material.ARROW),
             ItemStack.of(Material.SPECTRAL_ARROW),
-            tippedArrow(PotionEffect(PotionEffectType.WEAKNESS, 20*11, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.WEAKNESS, 20*30, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.SLOWNESS, 20*11, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.SLOWNESS, 20*30, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.SLOWNESS, 20*2, 3)),
-            tippedArrow(PotionEffect(PotionEffectType.LEVITATION, 20*10, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.LEVITATION, 20*5, 2)),
-            tippedArrow(PotionEffect(PotionEffectType.INSTANT_DAMAGE, 1, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.INSTANT_DAMAGE, 1, 1)),
-            tippedArrow(PotionEffect(PotionEffectType.POISON, 20*5, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.POISON, 20*11, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.POISON, 20*2, 2)),
-            tippedArrow(PotionEffect(PotionEffectType.WIND_CHARGED, 20*22, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.WEAVING, 20*22, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.OOZING, 20*22, 0)),
-            tippedArrow(PotionEffect(PotionEffectType.INFESTED, 20*22, 0)),
+            tippedArrow(PotionType.WEAKNESS),
+            tippedArrow(PotionType.LONG_WEAKNESS),
+            tippedArrow(PotionType.SLOWNESS),
+            tippedArrow(PotionType.LONG_SLOWNESS),
+            tippedArrow(PotionType.STRONG_SLOWNESS),
+            tippedArrow("Arrow of Levitation".component, PotionEffect(PotionEffectType.LEVITATION, 20*10, 0)),
+            tippedArrow("Arrow of Levitation".component, PotionEffect(PotionEffectType.LEVITATION, 20*5, 2)),
+            tippedArrow(PotionType.HARMING),
+            tippedArrow(PotionType.STRONG_HARMING),
+            tippedArrow(PotionType.POISON),
+            tippedArrow(PotionType.LONG_POISON),
+            tippedArrow(PotionType.STRONG_POISON),
+            tippedArrow(PotionType.WIND_CHARGED),
+            tippedArrow(PotionType.WEAVING),
+            tippedArrow(PotionType.OOZING),
+            tippedArrow(PotionType.INFESTED),
         )
-        private fun tippedArrow(effect: PotionEffect) =
-            ItemStack.of(Material.TIPPED_ARROW).apply { editMeta { (it as PotionMeta).addCustomEffect(effect, false) } }
+        private fun tippedArrow(name: Component, effect: PotionEffect) =
+            ItemStack.of(Material.TIPPED_ARROW).apply {
+                this.setData(DataComponentTypes.POTION_CONTENTS, PotionContents.potionContents()
+                    .addCustomEffect(effect)
+                    .build())
+                this.setData(DataComponentTypes.ITEM_NAME, name)
+            }
+        private fun tippedArrow(potionType: PotionType) =
+            ItemStack.of(Material.TIPPED_ARROW).apply {
+                this.setData(DataComponentTypes.POTION_CONTENTS, PotionContents.potionContents()
+                    .potion(potionType)
+                    .build())
+            }
 
         private fun mixedQuiver(size: Int): ItemStack {
             var remaining = size
             val items = mutableListOf<ItemStack>()
             while (remaining > 0) {
                 val arrow = arrows.random().clone()
-                arrow.amount = Random.nextInt(0, min(8, remaining))
-                remaining -= arrow.amount
+                val amount = Random.nextInt(1, 1+min(8, remaining))
+                arrow.amount = amount
+                remaining -= amount
+                items.add(arrow)
             }
             return ItemStacks.bundle(items)
         }
 
         val possibleMerchandise: List<List<Merchandise>> = listOf(
             listOf(
-                Merchandise("32x TNT".colored(0xfc4c1b)) { ItemStack.of(Material.TNT, 32) },
-                Merchandise("16x TNT".colored(0xfc4c1b)) { ItemStack.of(Material.TNT, 16) },
+                Merchandise("32x TNT".colored(0xfc4c1b), 32) { ItemStack.of(Material.TNT, 32) },
+                Merchandise("16x TNT".colored(0xfc4c1b), 16) { ItemStack.of(Material.TNT, 16) },
             ),
             listOf(
-                Merchandise("8x Pearl".colored(0x12a882)) { ItemStack.of(Material.ENDER_PEARL, 8) },
-                Merchandise("4x Pearl".colored(0x12a882)) { ItemStack.of(Material.ENDER_PEARL, 4) }
+                Merchandise("4x Pearl".colored(0x12a882), 4) { ItemStack.of(Material.ENDER_PEARL, 4) },
+                Merchandise("2x Pearl".colored(0x12a882), 2) { ItemStack.of(Material.ENDER_PEARL, 2) }
             ),
             listOf(
-                Merchandise("32x Arrows".component) { ItemStack.of(Material.ARROW, 32) },
-                Merchandise("16x Arrows".component) { ItemStack.of(Material.ARROW, 16) },
-                Merchandise("32x Mixed Arrow Quiver".component) { mixedQuiver(32) },
-                Merchandise("16x Mixed Arrow Quiver".component) { mixedQuiver(16) },
+                Merchandise("32x Arrows".component, 32) { ItemStack.of(Material.ARROW, 32) },
+                Merchandise("16x Arrows".component, 16) { ItemStack.of(Material.ARROW, 16) },
+                Merchandise("32x Mixed Arrow Quiver".component, 32) { mixedQuiver(32) },
+                Merchandise("16x Mixed Arrow Quiver".component, 16) { mixedQuiver(16) },
+            ),
+            listOf(
+                Merchandise("4x Breeze Rod".component, 4) { ItemStack.of(Material.BREEZE_ROD, 4) },
+                Merchandise("2x Breeze Rod".component, 2) { ItemStack.of(Material.BREEZE_ROD, 2) },
+            ),
+            listOf(
+                Merchandise("Water Bucket".component) { ItemStack.of(Material.WATER_BUCKET) },
+                Merchandise("Lava Bucket".component) { ItemStack.of(Material.LAVA_BUCKET) },
+            ),
+            listOf(
+                Merchandise("4x Obsidian".component, 4) { ItemStack.of(Material.OBSIDIAN, 4) },
+                Merchandise("2x Obsidian".component, 2) { ItemStack.of(Material.OBSIDIAN, 2) },
             ),
         )
     }
 
     inner class MerchandiseBoxMenu : GuiHolder {
+        override var inventoryCache: Inventory? = null
+
+        override val key: Key
+            get() = TraitorGamePlugin.key("merchandise_box")
+
         override val layout = """
             X X X X X X X X X
             X X X / _ / X X X
@@ -251,16 +315,19 @@ class Mogul : Neutral {
         override fun getItemAt(ch: Char, slot: Int): ItemStack? {
             return when (ch) {
                 '-' -> {
-                    val merchandise = this@Mogul.merchandiseList.getOrNull(merchandiseIndex) ?: return null
+                    val oldIndex = merchandiseIndex
+                    merchandiseIndex++
+
+                    val merchandise = this@Mogul.merchandiseList.getOrNull(oldIndex) ?: return null
                     val material = merchandise.itemProvider().type
 
-                    ItemStacks.merchandise(merchandise.name, material, merchandiseIndex)
+                    ItemStacks.merchandise(merchandise.name, merchandise.amount, material, oldIndex)
                 }
                 'X' -> ItemStacks.Gui.blackGlass
                 '/' -> ItemStacks.Gui.yellowGlass
+                '_' -> ItemStacks.moneyBag
                 else -> null
             }
         }
-
     }
 }

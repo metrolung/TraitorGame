@@ -6,11 +6,7 @@ import org.bukkit.plugin.Plugin
 
 @JvmRecord
 data class SessionSettings(
-    val traitorCount: Int,
-    val detectiveCount: Int,
     val bellLocation: Location,
-
-    val noteCooldownTicks: Int,
 
     val meetingCooldownTicks: Int,
     val discussionTimeTicks: Int,
@@ -23,17 +19,12 @@ data class SessionSettings(
 
     val roleSettings: RoleSettings
 ) {
-
-
     companion object {
-        fun create(plugin: Plugin, traitorCount: Int, detectiveCount: Int, neutralCount: Int, bellLocation: Location): SessionSettings {
+        fun create(plugin: Plugin, traitorCount: Int, neutralCount: Int, bellLocation: Location): SessionSettings {
             val config = plugin.config
 
             return SessionSettings(
-                traitorCount,
-                detectiveCount,
                 bellLocation,
-                noteCooldownTicks = (config.getDouble("detective.notebook-cooldown") * 20).toInt(),
                 meetingCooldownTicks = (config.getDouble("gameplay.meeting-cooldown") * 20).toInt(),
                 discussionTimeTicks = (config.getDouble("gameplay.discussion-time") * 20).toInt(),
                 votingTimeTicks = (config.getDouble("gameplay.voting-time") * 20).toInt(),
@@ -41,7 +32,7 @@ data class SessionSettings(
                 chatRange = config.getDouble("chat.range"),
                 chatFalloff = config.getDouble("chat.falloff"),
                 blockDampening = config.getDouble("chat.block-dampening"),
-                roleSettings = RoleSettings.create(traitorCount, detectiveCount, neutralCount)
+                roleSettings = RoleSettings.create(plugin, traitorCount, neutralCount)
             )
         }
     }

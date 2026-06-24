@@ -14,6 +14,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.event.entity.EntityExplodeEvent
+import org.bukkit.event.entity.EntityPickupItemEvent
 import org.bukkit.event.entity.ItemDespawnEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.inventory.InventoryClickEvent
@@ -22,6 +23,7 @@ import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.player.PlayerPickupItemEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
@@ -57,7 +59,7 @@ class SessionManager : Listener {
     @EventHandler
     @Suppress("UNUSED")
     private fun onServerTicked(event: ServerTickEndEvent) {
-        session?.onServerTicked()
+        session?.onServerTicked(event.tickNumber)
     }
 
     @EventHandler
@@ -98,6 +100,11 @@ class SessionManager : Listener {
     @EventHandler
     private fun onPlayerRespawn(event: PlayerPostRespawnEvent) {
         session?.onPlayerRespawn(event.player)
+    }
+
+    @EventHandler
+    private fun onPlayerPickup(event: EntityPickupItemEvent) {
+        session?.onEntityPickup(event)
     }
 
     @EventHandler

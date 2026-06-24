@@ -5,8 +5,26 @@ gameplay:
   voting-time: 90
   entity-damage-factor: 0.35
 
-detective:
-  notebook-cooldown: 3
+role:
+  astral:
+    count: 1
+    chance: 100.0
+
+  mogul:
+    count: 1
+    chance: 100.0
+    money-goal: 1000.00
+
+  detective:
+    count: 1
+    chance: 100.0
+    notebook-cooldown: 3
+
+  jester:
+    count: 1
+    chance: 50.0
+    punishment: 60.0
+
 
 chat:
   range: 15

@@ -8,7 +8,7 @@ object RolePicker {
     fun newRoleSelection(playerCount: Int, roleSettings: RoleSettings): List<Role.Generator> {
         val roleList = mutableListOf<Role.Generator>()
 
-        fun determineAvailable(rolePool: List<RoleConfig>): List<Role.Generator> {
+        fun determineAvailable(rolePool: List<Role.Setting>): List<Role.Generator> {
             val availableRoles = mutableListOf<Role.Generator>()
             for (roleConfig in rolePool) {
                 for (i in 0..<roleConfig.amount) {

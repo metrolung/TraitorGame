@@ -1,6 +1,7 @@
 package io.github.metrolung.traitorgame
 
 import io.papermc.paper.datacomponent.DataComponentTypes
+import io.papermc.paper.datacomponent.item.TooltipDisplay
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Material
@@ -16,12 +17,20 @@ object ItemStacks {
     val ROLE_EQUIPMENT_KEY = TraitorGamePlugin.key("equipment")
     val ROLE_MATERIAL_KEY = TraitorGamePlugin.key("material")
 
-    val manifesto: ItemStack
-        get() = ItemStack.of(Material.BOOK).apply {
+    fun manifesto(codeword: String): ItemStack = ItemStack.of(Material.BOOK).apply {
             this.setData(DataComponentTypes.ITEM_NAME, Component.text("Traitor's Manifesto").color(Colors.TRAITOR_RED.textColor))
             this.setData(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true)
-            this.lore(listOf("DO NOT LET ANYONE SEE THIS".colored(Colors.VERY_YELLOW).decorate(
-                TextDecoration.BOLD)))
+            this.lore(
+                listOf(
+                    "DO NOT LET ANYONE SEE THIS"
+                        .colored(Colors.VERY_YELLOW)
+                        .decorate(TextDecoration.BOLD)
+                        .decoration(TextDecoration.ITALIC, false),
+                    "Code Word: $codeword"
+                        .colored(Colors.WHITE)
+                        .decoration(TextDecoration.ITALIC, false)
+                )
+            )
             this.editPersistentDataContainer { pdc ->
                 pdc.set(ROLE_MATERIAL_KEY, PersistentDataType.STRING, "manifesto")
             }
@@ -37,7 +46,7 @@ object ItemStacks {
             }
         }
 
-    val merchandise_box: ItemStack
+    val merchandiseBox: ItemStack
         get() = ItemStack.of(Material.CHEST).apply {
             this.setData(DataComponentTypes.ITEM_NAME, Component.text("Merchandise Box"))
             this.setData(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true)
@@ -80,10 +89,9 @@ object ItemStacks {
     val moneyBag: ItemStack
         get() = ItemStack.of(Material.YELLOW_BUNDLE).apply {
             this.setData(DataComponentTypes.ITEM_NAME, "Money Bag".component)
+            this.setData(DataComponentTypes.TOOLTIP_DISPLAY, TooltipDisplay.tooltipDisplay().addHiddenComponents(
+                DataComponentTypes.BUNDLE_CONTENTS))
             this.lore(listOf(Component.text("Put precious minerals in here for cash").color(Colors.VERY_YELLOW.textColor)))
-            this.editPersistentDataContainer { pdc ->
-                pdc.set(ROLE_EQUIPMENT_KEY, PersistentDataType.STRING, "money_bag")
-            }
         }
 
     val detectiveCrossbow: ItemStack
@@ -94,6 +102,7 @@ object ItemStacks {
         }
 
     fun bundle(arrows: MutableList<ItemStack>): ItemStack = ItemStack.of(Material.BUNDLE).apply {
+        println(arrows)
         this.editMeta { meta ->
             (meta as BundleMeta).setItems(arrows)
         }
@@ -101,22 +110,30 @@ object ItemStacks {
 
 
     val MERCHANDISE_INDEX_KEY = TraitorGamePlugin.key("merchandise_index")
-    fun merchandise(name: Component, material: Material, index: Int) = ItemStack.of(material).apply {
+    fun merchandise(name: Component, amount: Int, material: Material, index: Int) = ItemStack.of(material).apply {
         this.setData(DataComponentTypes.ITEM_NAME, name)
         this.setData(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true)
+        this.setData(DataComponentTypes.TOOLTIP_DISPLAY, TooltipDisplay.tooltipDisplay().addHiddenComponents(
+            DataComponentTypes.BUNDLE_CONTENTS))
+        this.setData(DataComponentTypes.MAX_STACK_SIZE, amount)
+        this.amount = amount
+        this.lore(listOf("Click twice to give to someone".colored(Colors.VERY_YELLOW)))
         this.editPersistentDataContainer { pdc ->
-            pdc.set(ROLE_EQUIPMENT_KEY, PersistentDataType.STRING, "merchandise")
             pdc.set(MERCHANDISE_INDEX_KEY, PersistentDataType.INTEGER, index)
         }
     }
 
     object Gui {
-        val blackGlass = ItemStack.of(Material.BLACK_STAINED_GLASS_PANE).apply {
-            this.setData(DataComponentTypes.ITEM_NAME, "".component)
-        }
-        val yellowGlass = ItemStack.of(Material.YELLOW_STAINED_GLASS_PANE).apply {
-            this.setData(DataComponentTypes.ITEM_NAME, "".component)
-        }
+        val blackGlass
+            get() = ItemStack.of(Material.BLACK_STAINED_GLASS_PANE).apply {
+                this.setData(DataComponentTypes.ITEM_NAME, "".component)
+                this.editMeta { it.isHideTooltip = true }
+            }
+        val yellowGlass
+            get() = ItemStack.of(Material.YELLOW_STAINED_GLASS_PANE).apply {
+                this.setData(DataComponentTypes.ITEM_NAME, "".component)
+                this.editMeta { it.isHideTooltip = true }
+            }
     }
 
 }

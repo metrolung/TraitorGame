@@ -127,8 +127,8 @@ class Meeting(
         for ((_, alivePlayer) in session.alivePlayers) {
             val voteText = "Vote ${alivePlayer.name}"
 
-            if (FloodgateApi.isFloodgatePlayer(alivePlayer.playerUuid)) {
-                val linked: LinkedPlayer? = FloodgateApi.getPlayer(alivePlayer.playerUuid).linkedPlayer
+            if (FloodgateApi.isFloodgatePlayer(alivePlayer.uniqueId)) {
+                val linked: LinkedPlayer? = FloodgateApi.getPlayer(alivePlayer.uniqueId).linkedPlayer
 
                 if (linked == null) {
                     form.button(voteText, FormImage.Type.URL,
@@ -138,7 +138,7 @@ class Meeting(
                     form.button(voteText, FormImage.Type.URL, "https://cravatar.eu/head/${linked.javaUniqueId}")
                 }
             } else {
-                form.button(voteText, FormImage.Type.URL, "https://cravatar.eu/head/${alivePlayer.playerUuid}")
+                form.button(voteText, FormImage.Type.URL, "https://cravatar.eu/head/${alivePlayer.uniqueId}")
             }
             commands.add("${TraitorGamePlugin.namespace}:vote player ${alivePlayer.name}")
         }
@@ -346,7 +346,7 @@ class Meeting(
             is Vote.EndGame -> {
                 onMeetingEnd = {
                     server.sendMessage(Component.text("Session voted to end"))
-                    session.sessionManager.endSession()
+                    session.manager.endSession()
                 }
             }
 

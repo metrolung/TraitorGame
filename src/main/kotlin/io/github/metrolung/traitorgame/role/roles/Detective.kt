@@ -9,7 +9,6 @@ import io.github.metrolung.traitorgame.SessionCorpse
 import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.TraitorGamePlugin
 import io.github.metrolung.traitorgame.Vote
-import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.role.RoleSettings
 import io.github.metrolung.traitorgame.role.Survivor
 import io.github.metrolung.traitorgame.textColor
@@ -84,12 +83,9 @@ class Detective : Survivor {
                     return false
                 }
 
-                sessionPlayer.player.setCooldown(Material.BOOK, session.settings.noteCooldownTicks)
-                sessionPlayer.player.setCooldown(TraitorGamePlugin.key("notebook_cooldown"), session.settings.noteCooldownTicks)
-
                 val nearbySessionPlayers: MutableList<String> = mutableListOf()
                 for (nearbyPlayer in sessionPlayer.player.location.getNearbyEntities(8.0, 8.0, 8.0)) {
-                    if (nearbyPlayer.uniqueId == sessionPlayer.playerUuid) {
+                    if (nearbyPlayer.uniqueId == sessionPlayer.uniqueId) {
                         continue
                     }
 
@@ -112,6 +108,9 @@ class Detective : Survivor {
                     sessionPlayer.player.sendMessage(Component.text("Nothing to take note of.").color(Colors.MID_GRAY.textColor))
                     return false
                 }
+
+                sessionPlayer.player.setCooldown(Material.BOOK, session.settings.roleSettings.detectiveNotebookCooldownTicks)
+                sessionPlayer.player.setCooldown(TraitorGamePlugin.key("notebook_cooldown"), session.settings.roleSettings.detectiveNotebookCooldownTicks)
 
                 addNote(sessionPlayer.sessionPlayer, DetectiveNote.SeenNear(
                     sessionPlayer.player.location,
@@ -146,7 +145,7 @@ class Detective : Survivor {
                 val (swabbedName1, swabbedPlayer1) = session.swabs[swabIndex1]
                 val (swabbedName2, swabbedPlayer2) = session.swabs[swabIndex2]
 
-                if (swabbedPlayer1.playerUuid == swabbedPlayer2.playerUuid) {
+                if (swabbedPlayer1.uniqueId == swabbedPlayer2.uniqueId) {
                     session.server.playSound(Sound.sound {
                         it.source(Sound.Source.PLAYER)
                         it.pitch(2f)
@@ -254,9 +253,6 @@ class Detective : Survivor {
                     return false
                 }
 
-                sessionPlayer.player.setCooldown(Material.BOOK, session.settings.noteCooldownTicks)
-                sessionPlayer.player.setCooldown(TraitorGamePlugin.key("notebook_cooldown"), session.settings.noteCooldownTicks)
-
                 val corpse = entity.persistentDataContainer.get(
                     SessionCorpse.CORPSE_KEY,
                     PersistentDataType.STRING
@@ -267,6 +263,9 @@ class Detective : Survivor {
                 }
 
                 val sessionCorpse = session.deadPlayers[UUID.fromString(corpse)] ?: return false
+
+                sessionPlayer.player.setCooldown(Material.BOOK, session.settings.roleSettings.detectiveNotebookCooldownTicks)
+                sessionPlayer.player.setCooldown(TraitorGamePlugin.key("notebook_cooldown"), session.settings.roleSettings.detectiveNotebookCooldownTicks)
 
                 addNote(sessionPlayer.sessionPlayer, DetectiveNote.Death(
                     sessionCorpse.player.name,

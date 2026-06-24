@@ -7,9 +7,6 @@ import io.github.metrolung.traitorgame.role.Survivor
 
 
 object DefaultSurvivor : Survivor {
-    override val roleColor: Int
-        get() = Colors.SURVIVOR_TEAL
-
     override val name: String
         get() = "Survivor"
 

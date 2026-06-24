@@ -7,7 +7,6 @@ import io.github.metrolung.traitorgame.role.RoleType
 import io.papermc.paper.datacomponent.item.ResolvableProfile
 import io.papermc.paper.entity.LookAnchor
 import io.papermc.paper.event.player.AsyncChatEvent
-import net.kyori.adventure.key.Key
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
@@ -37,6 +36,7 @@ import org.bukkit.entity.TextDisplay
 import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDeathEvent
+import org.bukkit.event.entity.EntityPickupItemEvent
 import org.bukkit.event.entity.ItemDespawnEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.inventory.InventoryAction
@@ -65,7 +65,7 @@ import kotlin.time.Duration.Companion.seconds
 class Session(
     val server: Server,
     val plugin: Plugin,
-    val sessionManager: SessionManager,
+    val manager: SessionManager,
     val settings: SessionSettings,
 ) {
     private val mutableAlivePlayers: MutableMap<UUID, SessionPlayer>
@@ -280,7 +280,15 @@ class Session(
                 })
 
                 sessionPlayer.whenOnline { sessionPlayer, player ->
-                    player.sendMessage(Component.text("You are a ").append(sessionPlayer.role.stylized))
+                    player.sendMessage(
+                        Component.text {
+                            it.append("You are: ".component)
+                            it.append(sessionPlayer.role.stylized)
+                            it.append(" [".component)
+                            it.append(sessionPlayer.role.type.stylized)
+                            it.append("]".component)
+                        }
+                    )
                     player.sendMessage(
                         Component.empty()
                             .append(Component.text("GOAL").decorate(TextDecoration.BOLD).color(Colors.VERY_YELLOW.textColor))
@@ -300,6 +308,8 @@ class Session(
     }
 
     fun onSessionEnd(reason: EndGameReason?) {
+        val reason = reason ?: determineDefaultEndGameReason()
+
         val blockData = server.createBlockData(Material.AIR)
         settings.bellLocation.getWorld().setBlockData(settings.bellLocation, blockData)
         bellLabel.remove()
@@ -347,10 +357,7 @@ class Session(
                 Component.text("GG").decorate(TextDecoration.BOLD).color(Colors.VERY_YELLOW.textColor)
             )
 
-            player.playSound(Sound.sound {
-                it.source(Sound.Source.AMBIENT)
-                it.type(NamespacedKey.minecraft("item.goat_horn.sound.1"))
-            })
+            player.playSound(reason.winSound)
         }
     }
 
@@ -359,18 +366,18 @@ class Session(
             return EndGameReason.Draw
         }
 
-        val traitorWinGameReason = EndGameReason.RoleGroupWin(RoleType.TRAITOR)
-        if (alivePlayers.values.any { it.role.isWinner(this, it, traitorWinGameReason) }) {
+        val traitorWinGameReason = EndGameReason.RoleGroupWin(RoleType.Traitor)
+        if (alivePlayers.values.any { it.role.type == RoleType.Traitor && it.role.isWinner(this, it, traitorWinGameReason) }) {
             return traitorWinGameReason
         }
 
-        val survivorWinGameReason = EndGameReason.RoleGroupWin(RoleType.SURVIVOR)
-        if (alivePlayers.values.any { it.role.isWinner(this, it, survivorWinGameReason) }) {
+        val survivorWinGameReason = EndGameReason.RoleGroupWin(RoleType.Survivor)
+        if (alivePlayers.values.any { it.role.type == RoleType.Survivor && it.role.isWinner(this, it, survivorWinGameReason) }) {
             return survivorWinGameReason
         }
 
-        val neutralWinGameReason = EndGameReason.RoleGroupWin(RoleType.NEUTRAL)
-        if (alivePlayers.values.any { it.role.isWinner(this, it, neutralWinGameReason) }) {
+        val neutralWinGameReason = EndGameReason.RoleGroupWin(RoleType.Neutral)
+        if (alivePlayers.values.any { it.role.type == RoleType.Neutral && it.role.isWinner(this, it, neutralWinGameReason) }) {
             return neutralWinGameReason
         }
 
@@ -400,6 +407,10 @@ class Session(
 
             val nearby = deadPlayer.mannequin.location.getNearbyPlayers(1.5)
             for (nearbyPlayer in nearby) {
+                if (nearbyPlayer.location.distanceSquared(deadPlayer.mannequin.location) < 0.1*0.1) {
+                    continue
+                }
+
                 val player = alivePlayers[nearbyPlayer.uniqueId]?.onlineSessionPlayer ?: continue
 
                 if (player.player.isSneaking) {
@@ -408,15 +419,15 @@ class Session(
                     deadPlayer.mannequin.velocity = movement
                 }
 
-                if (player.role !is Detective && !deadPlayer.contaminators.containsKey(player.playerUuid)) {
-                    deadPlayer.contaminators[player.playerUuid] = player.sessionPlayer
+                if (player.role !is Detective && !deadPlayer.contaminators.containsKey(player.uniqueId)) {
+                    deadPlayer.contaminators[player.uniqueId] = player.sessionPlayer
                     player.player.sendMessage(Component.text("You have contaminated the corpse.").color(Colors.VERY_RED.textColor))
                 }
             }
         }
     }
 
-    fun onServerTicked() {
+    fun onServerTicked(tickNumber: Int) {
         if (activeMeeting?.state == Meeting.State.Finished) {
             activeMeeting = null
         }
@@ -425,7 +436,7 @@ class Session(
 
         for (alivePlayer in alivePlayers.values) {
             val onlinePlayer = alivePlayer.onlineSessionPlayer ?: continue
-            alivePlayer.role.onTickOnline(this, onlinePlayer)
+            alivePlayer.role.onTickOnline(this, onlinePlayer, tickNumber)
         }
 
         val activeMeeting = activeMeeting
@@ -457,7 +468,7 @@ class Session(
     }
 
     fun isPlayerAlive(player: SessionPlayer): Boolean {
-        return isPlayerAlive(player.playerUuid)
+        return isPlayerAlive(player.uniqueId)
     }
 
     fun isPlayerAlive(player: Player): Boolean {
@@ -472,7 +483,7 @@ class Session(
     //   since it specifically targets players who have died, instead
     //   of just players who might not have joined in time
     fun isPlayerDead(player: SessionPlayer): Boolean {
-        return isPlayerDead(player.playerUuid)
+        return isPlayerDead(player.uniqueId)
     }
 
     fun isPlayerDead(player: Player): Boolean {
@@ -510,7 +521,7 @@ class Session(
         interaction.spawnAt(location)
 
         for (contaminator in contaminators.values) {
-            if (contaminator.role.type == RoleType.TRAITOR) {
+            if (contaminator.role.type == RoleType.Traitor) {
                 contaminator.player?.sendMessage(Component.text("Hide the body by crouching.").color(Colors.VERY_RED.textColor))
             } else {
                 contaminator.player?.sendMessage(Component.text("You have contaminated the corpse.").color(Colors.VERY_RED.textColor))
@@ -529,9 +540,8 @@ class Session(
 
     fun onPlayerKilled(playerUuid: UUID, drops: MutableList<ItemStack>, causeOfDeath: String, contaminators: MutableMap<UUID, SessionPlayer>) {
         val deadPlayer = mutableAlivePlayers.remove(playerUuid)
-        println(alivePlayers)
         if (alivePlayers.isEmpty()) {
-            sessionManager.endSession()
+            manager.endSession()
             return
         }
 
@@ -551,7 +561,7 @@ class Session(
     }
 
     fun onPlayerKilled(player: SessionPlayer, drops: MutableList<ItemStack>, causeOfDeath: String, contaminators: MutableMap<UUID, SessionPlayer>) {
-        onPlayerKilled(player.playerUuid, drops, causeOfDeath, contaminators)
+        onPlayerKilled(player.uniqueId, drops, causeOfDeath, contaminators)
     }
 
     private fun applyDeadModifiers(player: Player) {
@@ -592,7 +602,7 @@ class Session(
 
     fun onEntityDeath(event: EntityDeathEvent) {
         if (event.entity is EnderDragon) {
-            sessionManager.endSession(EndGameReason.DragonDefeated)
+            manager.endSession(EndGameReason.DragonDefeated)
         }
     }
 
@@ -670,28 +680,27 @@ class Session(
     }
 
     fun onInventoryClickEvent(event: InventoryClickEvent) {
+        val sessionPlayer = alivePlayers[event.whoClicked.uniqueId] ?: return
+        val item = event.currentItem
+        val cursor = event.cursor
 
-        alivePlayers[event.whoClicked.uniqueId]?.let { sessionPlayer ->
-            val item = event.currentItem ?: return@let
-
-            (event.clickedInventory?.holder as? GuiHolder)?.let { guiHolder ->
-                if (sessionPlayer.role.handleGuiClick(this, sessionPlayer.onlineSessionPlayer!!, item, guiHolder, event.isRightClick)) {
-                    event.isCancelled = true
-                }
-
-                return
-            }
-
-            val equipmentType = item.persistentDataContainer.get(ItemStacks.ROLE_EQUIPMENT_KEY, PersistentDataType.STRING) ?: return@let
-
-            if (sessionPlayer.role.handleEquipmentInventoryClick(this, sessionPlayer.onlineSessionPlayer!!, item, equipmentType, event.isRightClick)) {
+        (event.clickedInventory?.holder as? GuiHolder)?.let { guiHolder ->
+            if (sessionPlayer.role.handleGuiClick(this, sessionPlayer.onlineSessionPlayer!!, item, cursor, guiHolder, event.slot, event.action)) {
                 event.isCancelled = true
             }
 
             return
         }
 
+        item?.persistentDataContainer?.get(ItemStacks.ROLE_EQUIPMENT_KEY, PersistentDataType.STRING)?.let { equipmentType ->
+            if (sessionPlayer.role.handleEquipmentInventoryClick(this, sessionPlayer.onlineSessionPlayer!!, item, equipmentType, event.action)) {
+                event.isCancelled = true
+            }
+        }
+
         if (event.clickedInventory == event.whoClicked.inventory) {
+            val guiHolder = event.whoClicked.openInventory.topInventory.holder as? GuiHolder
+            sessionPlayer.role.handleInventoryClick(this, sessionPlayer.onlineSessionPlayer!!, item, cursor, guiHolder, event.slot, event.action)
             return
         }
 
@@ -732,8 +741,26 @@ class Session(
 
         val player = event.player
 
-        val sessionPlayer: SessionPlayer = mutableAlivePlayers[player.uniqueId] ?: run {
+        val sessionPlayer = alivePlayers[player.uniqueId]?.onlineSessionPlayer ?: run {
             return
+        }
+
+        var contaminators = mutableMapOf<UUID, SessionPlayer>()
+
+        val killer = event.player.lastDamageCause?.damageSource?.directEntity
+        if (killer != null) {
+            val killerSessionPlayer = alivePlayers[killer.uniqueId]?.onlineSessionPlayer
+            if (killerSessionPlayer != null) {
+                contaminators = mutableMapOf(killerSessionPlayer.uniqueId to killerSessionPlayer.sessionPlayer)
+                if (killerSessionPlayer.role.onKilling(this, killerSessionPlayer, sessionPlayer)) {
+                    event.isCancelled = true
+                    return
+                }
+                if (sessionPlayer.role.onKilled(this, sessionPlayer, killerSessionPlayer)) {
+                    event.isCancelled = true
+                    return
+                }
+            }
         }
 
         if (!sessionPlayer.lastChanceUsed && qualifiesForLastChance(event)) {
@@ -766,26 +793,13 @@ class Session(
             return
         }
 
-        val possibleContaminator = event.player.lastDamageCause?.damageSource?.directEntity
-        val contaminators: MutableMap<UUID, SessionPlayer> = if (possibleContaminator != null) {
-            val possiblyAlive = alivePlayers[possibleContaminator.uniqueId]
-
-            if (possiblyAlive != null) {
-                mutableMapOf(possibleContaminator.uniqueId to possiblyAlive)
-            } else {
-                mutableMapOf()
-            }
-        } else {
-            mutableMapOf()
-        }
-
         val causeOfDeath = when (event.player.lastDamageCause?.cause) {
             EntityDamageEvent.DamageCause.KILL -> "Divine Retribution"
             EntityDamageEvent.DamageCause.WORLD_BORDER -> "Divine Retribution"
-            EntityDamageEvent.DamageCause.CONTACT -> "Exsanguination"
-            EntityDamageEvent.DamageCause.ENTITY_ATTACK -> "Exsanguination"
-            EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK -> "Exsanguination"
-            EntityDamageEvent.DamageCause.PROJECTILE -> "Exsanguination"
+            EntityDamageEvent.DamageCause.CONTACT -> "Exsanguination, Environmental"
+            EntityDamageEvent.DamageCause.ENTITY_ATTACK -> "Exsanguination, Direct"
+            EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK -> "Exsanguination, Direct"
+            EntityDamageEvent.DamageCause.PROJECTILE -> "Exsanguination, Indirect"
             EntityDamageEvent.DamageCause.SUFFOCATION -> "Asphyxia"
             EntityDamageEvent.DamageCause.FALL -> "Blunt Force"
             EntityDamageEvent.DamageCause.FIRE -> "Severe Burns"
@@ -803,7 +817,7 @@ class Session(
             EntityDamageEvent.DamageCause.MAGIC -> "Intoxication"
             EntityDamageEvent.DamageCause.WITHER -> "Intoxication"
             EntityDamageEvent.DamageCause.FALLING_BLOCK -> "Asphyxia"
-            EntityDamageEvent.DamageCause.THORNS -> "Exsanguination"
+            EntityDamageEvent.DamageCause.THORNS -> "Exsanguination, Direct"
             EntityDamageEvent.DamageCause.DRAGON_BREATH -> "Intoxication"
             EntityDamageEvent.DamageCause.FLY_INTO_WALL -> "Blunt Force"
             EntityDamageEvent.DamageCause.HOT_FLOOR -> "Severe Burns"
@@ -815,13 +829,24 @@ class Session(
             else -> "Unknown"
         }
 
-        println("gay ! $contaminators")
         onPlayerKilled(player.uniqueId, event.drops, causeOfDeath, contaminators)
     }
 
     fun onEntityDamageByEntity(event: EntityDamageByEntityEvent) {
-        if (event.damage > 1) {
-            getLivingPlayer(event.entity.uniqueId)?.let { sessionPlayer ->
+        if (event.damage > 0.001) {
+            alivePlayers[event.entity.uniqueId]?.onlineSessionPlayer?.let { sessionPlayer ->
+                val attackerSessionPlayer = alivePlayers[event.damager.uniqueId]?.onlineSessionPlayer
+                if (attackerSessionPlayer != null) {
+                    if (attackerSessionPlayer.role.onAttacking(this, attackerSessionPlayer, sessionPlayer)) {
+                        event.isCancelled = true
+                        return
+                    }
+                    if (sessionPlayer.role.onAttacked(this, sessionPlayer, attackerSessionPlayer)) {
+                        event.isCancelled = true
+                        return
+                    }
+                }
+
                 if (sessionPlayer.returnLocation != null && sessionPlayer.canReturn) {
                     sessionPlayer.canReturn = false
                     sessionPlayer.player?.sendMessage(Component
@@ -860,6 +885,14 @@ class Session(
     fun onPlayerRespawn(player: Player) {
         if (!isPlayerAlive(player)) {
             applyDeadModifiers(player)
+        }
+    }
+
+    fun onEntityPickup(event: EntityPickupItemEvent) {
+        val cannotPickup = event.item.persistentDataContainer.get(TraitorGamePlugin.key("cannot_pickup"), PersistentDataType.STRING) ?: return
+
+        if (event.entity.uniqueId == UUID.fromString(cannotPickup)) {
+            event.isCancelled = true
         }
     }
 
@@ -994,10 +1027,10 @@ class Session(
     var endGameTitle: TextComponent? = null
         private set
 
-    fun calculateEndGameText(reason: EndGameReason?) {
+    fun calculateEndGameText(reason: EndGameReason) {
         val text = mutableListOf<TextComponent>()
 
-        val reason = reason ?: determineDefaultEndGameReason()
+
         text.add(reason.winMessage)
         endGameTitle = reason.winMessage
 
