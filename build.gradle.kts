@@ -8,12 +8,15 @@ repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.opencollab.dev/main/")
+    maven("https://repo.xenondevs.xyz/releases")
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
     compileOnly("org.geysermc.floodgate:api:2.2.5-SNAPSHOT")
     implementation(kotlin("stdlib-jdk8"))
+    implementation("xyz.xenondevs.invui:invui:2.1.1")
+    implementation("xyz.xenondevs.invui:invui-kotlin:2.1.1")
 }
 
 kotlin {

@@ -10,7 +10,6 @@ import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.TraitorGamePlugin
 import io.github.metrolung.traitorgame.Vote
 import io.github.metrolung.traitorgame.role.RoleSettings
-import io.github.metrolung.traitorgame.role.Survivor
 import io.github.metrolung.traitorgame.textColor
 import net.kyori.adventure.inventory.Book
 import net.kyori.adventure.sound.Sound
@@ -297,6 +296,8 @@ class Detective : Survivor {
         if (notes.size >= 100)
             notes.removeFirst()
     }
+
+
 
     interface DetectiveNote {
         fun message(noteTime: Instant): Component

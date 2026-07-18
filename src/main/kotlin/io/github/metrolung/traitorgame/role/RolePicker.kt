@@ -5,15 +5,15 @@ import kotlin.random.Random
 
 object RolePicker {
     // Returns a list of roles that is at least the size of the players
-    fun newRoleSelection(playerCount: Int, roleSettings: RoleSettings): List<Role.Generator> {
-        val roleList = mutableListOf<Role.Generator>()
+    fun newRoleSelection(playerCount: Int, roleSettings: RoleSettings): List<Role.Builder> {
+        val roleList = mutableListOf<Role.Builder>()
 
-        fun determineAvailable(rolePool: List<Role.Setting>): List<Role.Generator> {
-            val availableRoles = mutableListOf<Role.Generator>()
+        fun determineAvailable(rolePool: List<Role.Setting>): List<Role.Builder> {
+            val availableRoles = mutableListOf<Role.Builder>()
             for (roleConfig in rolePool) {
                 for (i in 0..<roleConfig.amount) {
                     if (roleConfig.chance > Random.nextDouble()) {
-                        availableRoles.add(roleConfig.role)
+                        availableRoles.add(roleConfig.builder)
                     }
                 }
             }
@@ -23,15 +23,20 @@ object RolePicker {
         }
 
         val availableTraitorRoles = determineAvailable(roleSettings.traitorRolePool)
-        val availableNeutralRoles = determineAvailable(roleSettings.neutralRolePool)
+        val availablePassiveNeutralRoles = determineAvailable(roleSettings.passiveNeutralRolePool)
+        val availableEvilNeutralRoles = determineAvailable(roleSettings.evilNeutralRolePool)
         val availableSurvivorRoles = determineAvailable(roleSettings.survivorRolePool)
 
         for (i in 0..<roleSettings.traitorCount) {
             roleList += availableTraitorRoles.getOrNull(i) ?: roleSettings.unassignedTraitor
         }
 
-        for (i in 0..<min(availableNeutralRoles.size, roleSettings.neutralCount)) {
-            roleList += availableNeutralRoles[i]
+        for (i in 0..<min(availableEvilNeutralRoles.size, roleSettings.evilNeutralCount)) {
+            roleList += availableEvilNeutralRoles[i]
+        }
+
+        for (i in 0..<min(availablePassiveNeutralRoles.size, roleSettings.passiveNeutralCount)) {
+            roleList += availablePassiveNeutralRoles[i]
         }
 
         val remaining = playerCount-roleList.size
@@ -40,6 +45,8 @@ object RolePicker {
                 roleList += availableSurvivorRoles.getOrNull(i) ?: roleSettings.unassignedSurvivor
             }
         }
+
+        roleList.shuffle()
 
         return roleList
     }

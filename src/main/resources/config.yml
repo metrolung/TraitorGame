@@ -1,4 +1,6 @@
 
+structure-search-radius: 6400
+
 gameplay:
   meeting-cooldown: 120
   discussion-time: 30

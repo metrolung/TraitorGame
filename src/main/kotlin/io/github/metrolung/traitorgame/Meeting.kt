@@ -1,5 +1,6 @@
 package io.github.metrolung.traitorgame
 
+import io.github.metrolung.traitorgame.api.Floodgate
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
@@ -7,8 +8,10 @@ import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.TitlePart
+import org.bukkit.Location
 import org.bukkit.NamespacedKey
 import org.bukkit.Server
+import org.bukkit.WorldBorder
 import org.bukkit.entity.Player
 import org.bukkit.entity.TextDisplay
 import org.bukkit.potion.PotionEffect
@@ -37,6 +40,9 @@ class Meeting(
     private var onMeetingEnd = {}
     private var turnout: MutableMap<Vote, Int>? = null
 
+    var oldWorldBorderSize: Double? = null
+    var oldWorldBorderCenter: Location? = null
+
     fun startMeeting() {
         server.sendTitlePart(
             TitlePart.TIMES,
@@ -44,13 +50,16 @@ class Meeting(
         )
         server.sendTitlePart(TitlePart.TITLE, Component.text("MEETING!").color(Colors.VERY_RED.textColor))
 
-        val meetingWorldBorder = server.createWorldBorder()
-        meetingWorldBorder.size = 21.0
-        meetingWorldBorder.center = session.settings.bellLocation.toCenterLocation()
+        val worldBorder = session.settings.bellLocation.world.worldBorder
+
+        oldWorldBorderSize = worldBorder.size
+        oldWorldBorderCenter = worldBorder.center
+
+        worldBorder.size = 21.0
+        worldBorder.center = session.settings.bellLocation.toCenterLocation()
 
         for (player in server.onlinePlayers) {
             player.addPotionEffect(PotionEffect(PotionEffectType.BLINDNESS, 50, 1, false, false, false))
-            player.worldBorder = meetingWorldBorder
         }
 
         for (player in session.alivePlayers.values) {
@@ -127,8 +136,8 @@ class Meeting(
         for ((_, alivePlayer) in session.alivePlayers) {
             val voteText = "Vote ${alivePlayer.name}"
 
-            if (FloodgateApi.isFloodgatePlayer(alivePlayer.uniqueId)) {
-                val linked: LinkedPlayer? = FloodgateApi.getPlayer(alivePlayer.uniqueId).linkedPlayer
+            if (Floodgate.isFloodgatePlayer(alivePlayer.uniqueId)) {
+                val linked: LinkedPlayer? = Floodgate.getPlayer(alivePlayer.uniqueId)!!.linkedPlayer
 
                 if (linked == null) {
                     form.button(voteText, FormImage.Type.URL,
@@ -207,7 +216,7 @@ class Meeting(
     }
 
     fun onBellClicked(player: Player) {
-        val bedrockConnection = FloodgateApi.getPlayer(player.uniqueId)
+        val bedrockConnection = Floodgate.getPlayer(player.uniqueId)
 
         if (bedrockConnection != null && state == State.Voting) {
             bedrockVotingMenu(player, bedrockConnection)
@@ -228,7 +237,7 @@ class Meeting(
         server.sendMessage(Component.text("Voting started"))
 
         for (player in server.onlinePlayers) {
-            val bedrockConnection = FloodgateApi.getPlayer(player.uniqueId)
+            val bedrockConnection = Floodgate.getPlayer(player.uniqueId)
 
             if (bedrockConnection == null) {
                 javaVotingMenu(player)
@@ -360,13 +369,22 @@ class Meeting(
         }
     }
 
+    fun cleanup() {
+        val worldBorder = session.settings.bellLocation.world.worldBorder
+
+        if (oldWorldBorderSize == null || oldWorldBorderCenter == null) {
+            session.plugin.logger.warning("Old world border data missing, startMeeting likely not started")
+        }
+
+        oldWorldBorderSize?.let { worldBorder.size = it }
+        oldWorldBorderCenter?.let { worldBorder.center = it }
+    }
+
     private fun endMeeting() {
         this.state = State.Finished
         onMeetingEnd()
 
-        for (player in server.onlinePlayers) {
-            player.worldBorder = player.world.worldBorder
-        }
+        cleanup()
 
         for ((_, sessionPlayer) in session.alivePlayers) {
             sessionPlayer.role.onMeetingEnd(this.session, this, sessionPlayer, turnout ?: mapOf())
@@ -375,7 +393,7 @@ class Meeting(
                 sessionPlayer.canReturn = true
 
                 sessionPlayer.player?.let { player ->
-                    val bedrockConnection = FloodgateApi.getPlayer(player.uniqueId)
+                    val bedrockConnection = Floodgate.getPlayer(player.uniqueId)
 
                     if (bedrockConnection == null) {
                         javaBackMenu(player)

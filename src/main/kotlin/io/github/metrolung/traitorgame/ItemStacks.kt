@@ -12,7 +12,6 @@ import org.bukkit.inventory.meta.BundleMeta
 import org.bukkit.persistence.PersistentDataType
 
 
-@Suppress("UnstableApiUsage")
 object ItemStacks {
     val ROLE_EQUIPMENT_KEY = TraitorGamePlugin.key("equipment")
     val ROLE_MATERIAL_KEY = TraitorGamePlugin.key("material")
@@ -109,8 +108,8 @@ object ItemStacks {
     }
 
 
-    val MERCHANDISE_INDEX_KEY = TraitorGamePlugin.key("merchandise_index")
-    fun merchandise(name: Component, amount: Int, material: Material, index: Int) = ItemStack.of(material).apply {
+//    val MERCHANDISE_INDEX_KEY = TraitorGamePlugin.key("merchandise_index")
+    fun merchandise(name: Component, amount: Int, material: Material) = ItemStack.of(material).apply {
         this.setData(DataComponentTypes.ITEM_NAME, name)
         this.setData(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true)
         this.setData(DataComponentTypes.TOOLTIP_DISPLAY, TooltipDisplay.tooltipDisplay().addHiddenComponents(
@@ -118,9 +117,9 @@ object ItemStacks {
         this.setData(DataComponentTypes.MAX_STACK_SIZE, amount)
         this.amount = amount
         this.lore(listOf("Click twice to give to someone".colored(Colors.VERY_YELLOW)))
-        this.editPersistentDataContainer { pdc ->
-            pdc.set(MERCHANDISE_INDEX_KEY, PersistentDataType.INTEGER, index)
-        }
+//        this.editPersistentDataContainer { pdc ->
+//            pdc.set(MERCHANDISE_INDEX_KEY, PersistentDataType.INTEGER, index)
+//        }
     }
 
     object Gui {

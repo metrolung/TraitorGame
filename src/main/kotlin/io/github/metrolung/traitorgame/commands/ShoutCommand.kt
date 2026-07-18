@@ -15,7 +15,7 @@ import org.bukkit.entity.Player
 
 object ShoutCommand {
     fun create(): LiteralArgumentBuilder<CommandSourceStack> {
-        return Commands.literal("back")
+        return Commands.literal("shout")
             .requires { src -> src.sender.isOp }
             .then(
                 Commands.argument("message", StringArgumentType.greedyString())

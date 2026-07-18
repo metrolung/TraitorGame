@@ -34,7 +34,6 @@ class SessionManager : Listener {
         private set
     var session: Session? = null
         private set
-
     val isSessionActive: Boolean
         get() = session != null
 
@@ -186,48 +185,48 @@ class SessionManager : Listener {
         }
     }
 
-    @EventHandler
-    private fun onBlockBroken(event: BlockBreakEvent) {
-        session?.let { session ->
-            if (!session.blockCanBeChanged(event.block.location.toBlockLocation())) {
-                event.isCancelled = true
-            }
-        }
-    }
-
-    @EventHandler
-    private fun onEntityChangeBlock(event: EntityChangeBlockEvent) {
-        session?.let { session ->
-            if (!session.blockCanBeChanged(event.block.location.toBlockLocation())) {
-                event.isCancelled = true
-            }
-        }
-    }
-
-    @EventHandler
-    private fun onPistonExtend(event: BlockPistonExtendEvent) {
-        session?.let { session ->
-            if (event.blocks.any { !session.blockCanBeChanged(it.location) }) {
-                event.isCancelled = true
-            }
-        }
-    }
-
-    @EventHandler
-    private fun onEntityExploded(event: EntityExplodeEvent) {
-        session?.let { session ->
-            event.blockList().removeAll {
-                !session.blockCanBeChanged(it.location)
-            }
-        }
-    }
-
-    @EventHandler
-    private fun onBlockExploded(event: BlockExplodeEvent) {
-        session?.let { session ->
-            event.blockList().removeAll {
-                !session.blockCanBeChanged(it.location)
-            }
-        }
-    }
+//    @EventHandler
+//    private fun onBlockBroken(event: BlockBreakEvent) {
+//        session?.let { session ->
+//            if (!session.blockCanBeChanged(event.block.location.toBlockLocation())) {
+//                event.isCancelled = true
+//            }
+//        }
+//    }
+//
+//    @EventHandler
+//    private fun onEntityChangeBlock(event: EntityChangeBlockEvent) {
+//        session?.let { session ->
+//            if (!session.blockCanBeChanged(event.block.location.toBlockLocation())) {
+//                event.isCancelled = true
+//            }
+//        }
+//    }
+//
+//    @EventHandler
+//    private fun onPistonExtend(event: BlockPistonExtendEvent) {
+//        session?.let { session ->
+//            if (event.blocks.any { !session.blockCanBeChanged(it.location) }) {
+//                event.isCancelled = true
+//            }
+//        }
+//    }
+//
+//    @EventHandler
+//    private fun onEntityExploded(event: EntityExplodeEvent) {
+//        session?.let { session ->
+//            event.blockList().removeAll {
+//                !session.blockCanBeChanged(it.location)
+//            }
+//        }
+//    }
+//
+//    @EventHandler
+//    private fun onBlockExploded(event: BlockExplodeEvent) {
+//        session?.let { session ->
+//            event.blockList().removeAll {
+//                !session.blockCanBeChanged(it.location)
+//            }
+//        }
+//    }
 }

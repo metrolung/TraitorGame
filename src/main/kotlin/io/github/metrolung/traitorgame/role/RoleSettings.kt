@@ -1,23 +1,21 @@
 package io.github.metrolung.traitorgame.role
 
-import io.github.metrolung.traitorgame.role.roles.Astral
-import io.github.metrolung.traitorgame.role.roles.Detective
-import io.github.metrolung.traitorgame.role.roles.Mogul
-import io.github.metrolung.traitorgame.role.roles.DefaultSurvivor
-import io.github.metrolung.traitorgame.role.roles.DefaultTraitor
-import io.github.metrolung.traitorgame.role.roles.Jester
-import org.bukkit.plugin.Plugin
+import io.github.metrolung.traitorgame.TraitorGamePlugin
+import io.github.metrolung.traitorgame.role.roles.Survivor
+import io.github.metrolung.traitorgame.role.roles.Traitor
 
 data class RoleSettings(
     val traitorCount: Int,
-    val neutralCount: Int,
+    val passiveNeutralCount: Int,
+    val evilNeutralCount: Int,
 
     val traitorRolePool: List<Role.Setting>,
-    val neutralRolePool: List<Role.Setting>,
+    val passiveNeutralRolePool: List<Role.Setting>,
+    val evilNeutralRolePool: List<Role.Setting>,
     val survivorRolePool: List<Role.Setting>,
 
-    val unassignedTraitor: Role.Generator,
-    val unassignedSurvivor: Role.Generator,
+    val unassignedTraitor: Role.Builder,
+    val unassignedSurvivor: Role.Builder,
 
     val detectiveNotebookCooldownTicks: Int,
     val traitorCodeWord: String,
@@ -25,37 +23,34 @@ data class RoleSettings(
     val jesterPunishmentTicks: Int,
 ) {
     companion object {
-        fun create(plugin: Plugin, traitorCount: Int, neutralCount: Int): RoleSettings {
+        fun create(
+            plugin: TraitorGamePlugin,
+            traitorCount: Int,
+            passiveNeutralCount: Int,
+            evilNeutralCount: Int,
+        ): RoleSettings {
             val config = plugin.config
 
             return RoleSettings(
                 traitorCount,
-                neutralCount,
-                traitorRolePool = listOf(),
-                neutralRolePool = listOf(
-                    Role.Setting(
-                        config.getInt("role.mogul.count"),
-                        config.getDouble("role.mogul.chance")/100.0,
-                    ) { Mogul() },
-                    Role.Setting(
-                        config.getInt("role.jester.count"),
-                        config.getDouble("role.jester.chance")/100.0,
-                    ) { Jester() }
-                ),
-                survivorRolePool = listOf(
-                    Role.Setting(
-                        config.getInt("role.detective.count"),
-                        config.getDouble("role.detective.chance")/100.0,
-                    ) { Detective() },
-                    Role.Setting(
-                        config.getInt("role.astral.count"),
-                        config.getDouble("role.astral.chance")/100.0,
-                    ) { Astral }
-                ),
-                unassignedTraitor = { DefaultTraitor },
-                unassignedSurvivor = { DefaultSurvivor },
+                passiveNeutralCount,
+                evilNeutralCount,
+                survivorRolePool = plugin.roles.values.mapNotNull { roleSetting ->
+                    roleSetting.takeIf { it.alignment.isSurvivor }
+                },
+                passiveNeutralRolePool = plugin.roles.values.mapNotNull { roleSetting ->
+                    roleSetting.takeIf { it.alignment.isPassiveNeutral }
+                },
+                evilNeutralRolePool = plugin.roles.values.mapNotNull { roleSetting ->
+                    roleSetting.takeIf { it.alignment.isEvilNeutral }
+                },
+                traitorRolePool = plugin.roles.values.mapNotNull { roleSetting ->
+                    roleSetting.takeIf { it.alignment.isTraitor }
+                },
+                unassignedTraitor = ::Traitor,
+                unassignedSurvivor = ::Survivor,
                 detectiveNotebookCooldownTicks = (config.getDouble("role.detective.notebook-cooldown") * 20).toInt(),
-                traitorCodeWord = Traitor.codeWords.random(),
+                traitorCodeWord = plugin.getCodewords().random(),
                 mogulMoneyGoal = (config.getDouble("role.mogul.money-goal") * 100).toLong(),
                 jesterPunishmentTicks = (config.getDouble("role.jester.punishment") * 20).toInt()
             )

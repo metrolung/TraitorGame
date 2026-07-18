@@ -51,7 +51,7 @@ class RoleCommand(private val plugin: TraitorGamePlugin) {
                 it.append(" has role: ".component)
                 it.append(role.stylized)
                 it.append(" [".component)
-                it.append(role.type.stylized)
+                it.append(role.alignment.stylized)
                 it.append("]".component)
             }
         )

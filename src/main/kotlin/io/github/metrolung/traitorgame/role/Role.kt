@@ -14,6 +14,7 @@ import org.bukkit.Location
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Item
 import org.bukkit.event.inventory.InventoryAction
+import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemStack
 
 interface Role {
@@ -22,14 +23,7 @@ interface Role {
     val stylized: TextComponent
         get() = Component.text(name).color(roleColor.textColor)
 
-    val type: RoleType
-
-    val isTraitor: Boolean
-        get() = type == RoleType.Traitor
-    val isNeutral: Boolean
-        get() = type == RoleType.Neutral
-    val isSurvivor: Boolean
-        get() = type == RoleType.Survivor
+    val alignment: RoleAlignment
 
     val isEvil: Boolean
 
@@ -37,8 +31,11 @@ interface Role {
 
     fun getGoal(roleSettings: RoleSettings): String
 
+
     fun handleGuiClick(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack?, cursor: ItemStack?, guiHolder: GuiHolder, slot: Int, action: InventoryAction): Boolean = false
     fun handleInventoryClick(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack?, cursor: ItemStack?, guiHolder: GuiHolder?, slot: Int, action: InventoryAction): Boolean = false
+    fun itemPickup(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, entity: Item): Boolean = false
+    fun itemDropped(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, entity: Item): Boolean = false
 
     fun handleEquipmentUse(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, equipmentType: String, block: Location?): Boolean = false
     fun handleEquipmentInventoryClick(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, equipmentType: String, action: InventoryAction): Boolean = false
@@ -59,9 +56,9 @@ interface Role {
 
     fun onTickOnline(session: Session, sessionPlayer: OnlineSessionPlayer, tick: Int) {}
 
-    fun interface Generator {
-        fun generate(): Role
+    fun interface Builder {
+        fun build(): Role
     }
 
-    data class Setting(val amount: Int, val chance: Double, val role: Generator)
+    data class Setting(val amount: Int, val chance: Double, val alignment: RoleAlignment, val builder: Builder)
 }

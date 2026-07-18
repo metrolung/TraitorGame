@@ -1,11 +1,10 @@
 package io.github.metrolung.traitorgame
 
+import io.github.metrolung.traitorgame.api.Floodgate
 import io.github.metrolung.traitorgame.role.roles.Detective
 import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.role.RolePicker
-import io.github.metrolung.traitorgame.role.RoleType
 import io.papermc.paper.datacomponent.item.ResolvableProfile
-import io.papermc.paper.entity.LookAnchor
 import io.papermc.paper.event.player.AsyncChatEvent
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
@@ -21,7 +20,7 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.Server
-import org.bukkit.entity.Creeper
+import org.bukkit.entity.BlockDisplay
 import org.bukkit.entity.Display
 import org.bukkit.entity.EnderDragon
 import org.bukkit.entity.Entity
@@ -31,7 +30,6 @@ import org.bukkit.entity.Item
 import org.bukkit.entity.Mannequin
 import org.bukkit.entity.Player
 import org.bukkit.entity.Pose
-import org.bukkit.entity.TNTPrimed
 import org.bukkit.entity.TextDisplay
 import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent
@@ -69,8 +67,11 @@ class Session(
     val settings: SessionSettings,
 ) {
     private val mutableAlivePlayers: MutableMap<UUID, SessionPlayer>
+    private val mutableAllPlayers: MutableMap<UUID, SessionPlayer>
+    private val mutableDeadPlayers: MutableMap<UUID, SessionCorpse>
     private var meetingCooldown = settings.meetingCooldownTicks / 2
     private var bellLabel: TextDisplay
+    private var bellBlock: BlockDisplay
     private var activeMeeting: Meeting? = null
 
     var roleShown = false
@@ -79,9 +80,8 @@ class Session(
     // this will not be cleaned up until the game ends which isnt ideal but probably not a big deal
     val swabs = mutableListOf<Pair<String?, SessionPlayer>>()
 
-    private val mutableDeadPlayers = mutableMapOf<UUID, SessionCorpse>()
-
     val allPlayers: Map<UUID, SessionPlayer>
+        get() = mutableAllPlayers
     val alivePlayers: Map<UUID, SessionPlayer>
         get() = mutableAlivePlayers
     val deadPlayers: Map<UUID, SessionCorpse>
@@ -96,7 +96,7 @@ class Session(
                 val sessionPlayer = SessionPlayer(
                     player.uniqueId,
                     player.name,
-                    roles[roleIdx].generate(),
+                    roles[roleIdx].build(),
                     server
                 )
                 players[player.uniqueId] = sessionPlayer
@@ -104,21 +104,24 @@ class Session(
         }
 
         this.mutableAlivePlayers = players
-        this.allPlayers = players.toMap()
+        this.mutableAllPlayers = players.toMutableMap()
+        this.mutableDeadPlayers = mutableMapOf()
         this.bellLabel = settings.bellLocation.getWorld()
             .createEntity(settings.bellLocation, TextDisplay::class.java)
+        this.bellBlock = settings.bellLocation.getWorld()
+            .createEntity(settings.bellLocation, BlockDisplay::class.java)
     }
 
-    fun sendBack(player: UUID): TextComponent {
-        val sessionPlayer = getLivingPlayer(player) ?: return Component.text("You are not alive")
-        val locationPreMeeting = sessionPlayer.returnLocation ?: return Component.text("Nowhere to return to")
+    fun sendBack(player: UUID): String {
+        val sessionPlayer = alivePlayers[player] ?: return "You are not alive"
+        val locationPreMeeting = sessionPlayer.returnLocation ?: return "Nowhere to return to"
 
         if (!sessionPlayer.canReturn) {
-            return Component.text("You may not return at this time")
+            return "You may not return at this time"
         }
 
         if (!isPlayerAlive(sessionPlayer)) {
-            return Component.text("You are not alive")
+            return "You are not alive"
         }
 
         sessionPlayer.player?.teleport(locationPreMeeting)
@@ -128,7 +131,7 @@ class Session(
         })
 
         sessionPlayer.returnLocation = null
-        return Component.text("Teleported")
+        return "Teleported"
     }
 
     fun gracePeriod() {
@@ -141,6 +144,22 @@ class Session(
         val center = settings.bellLocation.toCenterLocation()
 
         return player.world.key == center.world.key && player.location.distanceSquared(center) < 6*6
+    }
+
+    fun circleBell(player: Player, radians: Double, distance: Double) {
+        val pos = settings.bellLocation.toCenterLocation()
+        pos.yaw = (radians*180/Math.PI).toFloat()
+        pos.pitch = 0f
+        pos.add(
+            sin(radians)*distance,
+            0.0,
+            -cos(radians)*distance
+        )
+
+        val posY = pos.world.getHighestBlockYAt(pos) + 1
+        pos.y = posY.toDouble()
+
+        player.teleport(pos)
     }
 
     fun gatherAroundBell() {
@@ -156,14 +175,7 @@ class Session(
                 continue
             }
 
-            val angle = Random.nextDouble(-Math.PI, Math.PI)
-            player.teleport(center)
-
-            val offset = center.add(cos(angle)*4, 0.0, sin(angle)*4)
-            val offsetY = offset.world.getHighestBlockYAt(offset) + 1
-            offset.y = offsetY.toDouble()
-            player.teleport(offset)
-            player.lookAt(bellLabel, LookAnchor.EYES, LookAnchor.FEET)
+            circleBell(player, Random.nextDouble(-Math.PI, Math.PI), 4.0)
         }
     }
 
@@ -193,10 +205,98 @@ class Session(
         }
     }
 
-    fun onSessionStart() {
-        val blockData = server.createBlockData(Material.BELL)
-        settings.bellLocation.getWorld().setBlockData(settings.bellLocation, blockData)
+    fun initPlayer(sessionPlayer: OnlineSessionPlayer) {
+        val player = sessionPlayer.player
 
+        updatePlayerList(player)
+        player.resetStats()
+
+        circleBell(player, Random.nextDouble(-Math.PI, Math.PI), 4.0)
+
+        if (player.gameMode == GameMode.SPECTATOR) {
+            player.gameMode = GameMode.SURVIVAL
+        }
+
+        player.sendTitlePart(
+            TitlePart.TIMES,
+            Title.Times.times(
+                Duration.ofSeconds(0),
+                Duration.ofSeconds(10),
+                Duration.ofSeconds(0)
+            )
+        )
+
+        player.sendTitlePart(
+            TitlePart.TITLE,
+            Component.text("")
+        )
+
+        player.sendTitlePart(
+            TitlePart.SUBTITLE,
+            Component.text("You are...")
+        )
+
+        val sound = Sound.sound {
+            it.source(Sound.Source.AMBIENT)
+            it.volume(0.8f)
+            it.type(NamespacedKey.minecraft("ambient.soul_sand_valley.mood"))
+        }
+        server.playSound(sound)
+
+        server.scheduler.runTaskLater(plugin, { _ ->
+            roleShown = true
+
+            player.sendTitlePart(
+                TitlePart.TIMES,
+                Title.Times.times(
+                    Duration.ofSeconds(0),
+                    Duration.ofSeconds(2),
+                    Duration.ofSeconds(1)
+                )
+            )
+            player.addPotionEffect(PotionEffect(PotionEffectType.BLINDNESS, 60, 1, false, false, false))
+
+            player.sendTitlePart(
+                TitlePart.TITLE,
+                sessionPlayer.role.stylized.decorate(TextDecoration.BOLD)
+            )
+            player.sendTitlePart(
+                TitlePart.SUBTITLE,
+                Component.text("Shh!").decorate(TextDecoration.ITALIC).color(Colors.MID_GRAY.textColor)
+            )
+
+            player.stopSound(sound)
+            player.playSound(Sound.sound {
+                it.source(Sound.Source.PLAYER)
+                it.type(NamespacedKey.minecraft("entity.evoker.prepare_summon"))
+            })
+
+            player.sendMessage(
+                Component.text {
+                    it.append("You are: ".component)
+                    it.append(sessionPlayer.role.stylized)
+                    it.append(" [".component)
+                    it.append(sessionPlayer.role.alignment.stylized)
+                    it.append("]".component)
+                }
+            )
+            player.sendMessage(
+                Component.empty()
+                    .append(Component.text("GOAL").decorate(TextDecoration.BOLD).color(Colors.VERY_YELLOW.textColor))
+                    .append(": ${sessionPlayer.role.getGoal(settings.roleSettings)}")
+            )
+
+            player.sendMessage("")
+
+            player.sendMessage(Component.text("Clear chat with F3 + D").color(Colors.LIGHT_GRAY.textColor))
+            player.sendMessage(Component.text("You can view your role at any point with /role").color(Colors.LIGHT_GRAY.textColor))
+
+            player.inventory.heldItemSlot = 8
+            sessionPlayer.role.onRolePresented(this, sessionPlayer)
+        }, 60L)
+    }
+
+    fun onSessionStart() {
         val labelLocation = settings.bellLocation.toCenterLocation().add(0.0, 1.0, 0.0)
         this.bellLabel.billboard = Display.Billboard.CENTER
         this.bellLabel.isSeeThrough = true
@@ -204,8 +304,16 @@ class Session(
         this.bellLabel.lineWidth = 150
         this.bellLabel.spawnAt(labelLocation)
 
-        gatherAroundBell()
-        gracePeriod()
+        val bell = server.createBlockData(Material.BELL)
+        val bellBlockLocation = settings.bellLocation.toBlockLocation()
+        bellBlockLocation.pitch = 0f
+        bellBlockLocation.yaw = 0f
+        this.bellBlock.block = bell
+        this.bellLabel.viewRange = Float.MAX_VALUE
+
+        val bellBlockData = server.createBlockData(Material.BELL)
+        this.bellBlock.block = bellBlockData
+        this.bellBlock.spawnAt(bellBlockLocation)
 
         for (world in server.worlds) {
             for (entity in world.entities) {
@@ -216,108 +324,36 @@ class Session(
         }
 
         for (sessionPlayer in this.alivePlayers.values) {
-            val player = sessionPlayer.player ?: continue
-
-            updatePlayerList(player)
-
-            player.resetStats()
-
-            if (player.gameMode == GameMode.SPECTATOR)
-                player.gameMode = GameMode.SURVIVAL
-
-            player.sendTitlePart(
-                TitlePart.TIMES,
-                Title.Times.times(
-                    Duration.ofSeconds(0),
-                    Duration.ofSeconds(10),
-                    Duration.ofSeconds(0)
-                )
-            )
-
-            player.sendTitlePart(
-                TitlePart.TITLE,
-                Component.text("")
-            )
-
-            player.sendTitlePart(
-                TitlePart.SUBTITLE,
-                Component.text("You are...")
-            )
-
-            val sound = Sound.sound {
-                it.source(Sound.Source.AMBIENT)
-                it.volume(0.8f)
-                it.type(NamespacedKey.minecraft("ambient.soul_sand_valley.mood"))
+            sessionPlayer.whenOnline { sessionPlayer ->
+                initPlayer(sessionPlayer)
             }
-            server.playSound(sound)
+        }
 
-            server.scheduler.runTaskLater(plugin, { _ ->
-                roleShown = true
+        gracePeriod()
+    }
 
-                player.sendTitlePart(
-                    TitlePart.TIMES,
-                    Title.Times.times(
-                        Duration.ofSeconds(0),
-                        Duration.ofSeconds(2),
-                        Duration.ofSeconds(1)
-                    )
-                )
-                player.addPotionEffect(PotionEffect(PotionEffectType.BLINDNESS, 60, 1, false, false, false))
+    fun cleanup() {
+        activeMeeting?.cleanup()
 
-                player.sendTitlePart(
-                    TitlePart.TITLE,
-                    sessionPlayer.role.stylized.decorate(TextDecoration.BOLD)
-                )
-                player.sendTitlePart(
-                    TitlePart.SUBTITLE,
-                    Component.text("Shh!").decorate(TextDecoration.ITALIC).color(Colors.MID_GRAY.textColor)
-                )
+        val blockData = server.createBlockData(Material.AIR)
+        this.settings.bellLocation.getWorld().setBlockData(settings.bellLocation, blockData)
+        this.bellLabel.remove()
+        this.bellBlock.remove()
 
-                sessionPlayer.player?.stopSound(sound)
-                sessionPlayer.player?.playSound(Sound.sound {
-                    it.source(Sound.Source.PLAYER)
-                    it.type(NamespacedKey.minecraft("entity.evoker.prepare_summon"))
-                })
+        for (corpse in deadPlayers.values) {
+            corpse.mannequin.remove()
+            corpse.interaction.remove()
+        }
 
-                sessionPlayer.whenOnline { sessionPlayer, player ->
-                    player.sendMessage(
-                        Component.text {
-                            it.append("You are: ".component)
-                            it.append(sessionPlayer.role.stylized)
-                            it.append(" [".component)
-                            it.append(sessionPlayer.role.type.stylized)
-                            it.append("]".component)
-                        }
-                    )
-                    player.sendMessage(
-                        Component.empty()
-                            .append(Component.text("GOAL").decorate(TextDecoration.BOLD).color(Colors.VERY_YELLOW.textColor))
-                            .append(": ${sessionPlayer.role.getGoal(settings.roleSettings)}")
-                    )
-
-                    player.sendMessage("")
-
-                    player.sendMessage(Component.text("Clear chat with F3 + D").color(Colors.LIGHT_GRAY.textColor))
-                    player.sendMessage(Component.text("You can view your role at any point with /role").color(Colors.LIGHT_GRAY.textColor))
-
-                    sessionPlayer.player.inventory.heldItemSlot = 8
-                    sessionPlayer.role.onRolePresented(this, sessionPlayer)
-                }
-            }, 60L)
+        for (player in server.onlinePlayers) {
+            listAll(player)
         }
     }
 
     fun onSessionEnd(reason: EndGameReason?) {
         val reason = reason ?: determineDefaultEndGameReason()
 
-        val blockData = server.createBlockData(Material.AIR)
-        settings.bellLocation.getWorld().setBlockData(settings.bellLocation, blockData)
-        bellLabel.remove()
-
-        for (corpse in deadPlayers.values) {
-            corpse.mannequin.remove()
-            corpse.interaction.remove()
-        }
+        cleanup()
 
         for (player in this.alivePlayers.values) {
             val player = player.player ?: continue
@@ -366,19 +402,16 @@ class Session(
             return EndGameReason.Draw
         }
 
-        val traitorWinGameReason = EndGameReason.RoleGroupWin(RoleType.Traitor)
-        if (alivePlayers.values.any { it.role.type == RoleType.Traitor && it.role.isWinner(this, it, traitorWinGameReason) }) {
-            return traitorWinGameReason
+        if (alivePlayers.values.any { it.role.alignment.isTraitor && it.role.isWinner(this, it, EndGameReason.TraitorWin) }) {
+            return EndGameReason.TraitorWin
         }
 
-        val survivorWinGameReason = EndGameReason.RoleGroupWin(RoleType.Survivor)
-        if (alivePlayers.values.any { it.role.type == RoleType.Survivor && it.role.isWinner(this, it, survivorWinGameReason) }) {
-            return survivorWinGameReason
+        if (alivePlayers.values.any { it.role.alignment.isSurvivor && it.role.isWinner(this, it, EndGameReason.SurvivorWin) }) {
+            return EndGameReason.SurvivorWin
         }
 
-        val neutralWinGameReason = EndGameReason.RoleGroupWin(RoleType.Neutral)
-        if (alivePlayers.values.any { it.role.type == RoleType.Neutral && it.role.isWinner(this, it, neutralWinGameReason) }) {
-            return neutralWinGameReason
+        if (alivePlayers.values.any { it.role.alignment.isNeutral && it.role.isWinner(this, it, EndGameReason.NeutralWin) }) {
+            return EndGameReason.NeutralWin
         }
 
         return EndGameReason.Draw
@@ -402,18 +435,13 @@ class Session(
 
     private fun checkPlayerNearCorpse() {
         for (deadPlayer in deadPlayers.values) {
-
             deadPlayer.interaction.teleport(deadPlayer.mannequin.location)
 
             val nearby = deadPlayer.mannequin.location.getNearbyPlayers(1.5)
             for (nearbyPlayer in nearby) {
-                if (nearbyPlayer.location.distanceSquared(deadPlayer.mannequin.location) < 0.1*0.1) {
-                    continue
-                }
-
                 val player = alivePlayers[nearbyPlayer.uniqueId]?.onlineSessionPlayer ?: continue
 
-                if (player.player.isSneaking) {
+                if (player.player.isSneaking && nearbyPlayer.location.distanceSquared(deadPlayer.mannequin.location) >= 0.5*0.5) {
                     val movement = player.player.location.subtract(deadPlayer.mannequin.location).toVector().normalize().multiply(0.03)
 
                     deadPlayer.mannequin.velocity = movement
@@ -434,9 +462,23 @@ class Session(
 
         checkPlayerNearCorpse()
 
-        for (alivePlayer in alivePlayers.values) {
-            val onlinePlayer = alivePlayer.onlineSessionPlayer ?: continue
-            alivePlayer.role.onTickOnline(this, onlinePlayer, tickNumber)
+        val pistonBlockData = server.createBlockData(Material.MOVING_PISTON)
+        settings.bellLocation.getWorld().setBlockData(settings.bellLocation, pistonBlockData)
+
+        val bellBlockData = server.createBlockData(Material.BELL)
+        val barrierBlockData = server.createBlockData(Material.BARRIER)
+        for (player in server.onlinePlayers) {
+            if (Floodgate.isFloodgatePlayer(player.uniqueId)) {
+                player.sendBlockChange(settings.bellLocation, bellBlockData)
+            } else {
+                player.sendBlockChange(settings.bellLocation, barrierBlockData)
+            }
+
+            val alivePlayer = alivePlayers[player.uniqueId]
+            if (alivePlayer != null) {
+                val onlinePlayer = alivePlayer.onlineSessionPlayer!!
+                alivePlayer.role.onTickOnline(this, onlinePlayer, tickNumber)
+            }
         }
 
         val activeMeeting = activeMeeting
@@ -494,9 +536,9 @@ class Session(
         return deadPlayers.containsKey(player)
     }
 
-    fun getLivingPlayer(player: UUID): SessionPlayer? {
-        return alivePlayers[player]
-    }
+//    fun getLivingPlayer(player: UUID): SessionPlayer? {
+//        return alivePlayers[player]
+//    }
 
     private fun spawnCorpse(location: Location, player: Player, sessionPlayer: SessionPlayer, causeOfDeath: String, contaminators: MutableMap<UUID, SessionPlayer>) {
         val mannequin = location.world.spawnEntity(location, EntityType.MANNEQUIN) as Mannequin
@@ -508,7 +550,6 @@ class Session(
         mannequin.isInvulnerable = true
         mannequin.profile = ResolvableProfile.resolvableProfile(player.playerProfile)
         mannequin.setPose(Pose.SLEEPING, true)
-        mannequin.spawnAt(location)
 
         val interaction = location.world.spawnEntity(location, EntityType.INTERACTION) as Interaction
         interaction.persistentDataContainer.set(
@@ -518,10 +559,9 @@ class Session(
         )
         interaction.interactionWidth = 1.5f
         interaction.interactionHeight = 0.5f
-        interaction.spawnAt(location)
 
         for (contaminator in contaminators.values) {
-            if (contaminator.role.type == RoleType.Traitor) {
+            if (contaminator.role.isEvil) {
                 contaminator.player?.sendMessage(Component.text("Hide the body by crouching.").color(Colors.VERY_RED.textColor))
             } else {
                 contaminator.player?.sendMessage(Component.text("You have contaminated the corpse.").color(Colors.VERY_RED.textColor))
@@ -575,35 +615,44 @@ class Session(
             return false
         }
 
-        if (damage.cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION) {
-            if (damage.damageSource.directEntity is TNTPrimed) {
-                return false
-            }
-
-            if (damage.damageSource.directEntity is Creeper) {
-                return true
-            }
-        }
-
-        if (damage.cause == EntityDamageEvent.DamageCause.ENTITY_ATTACK) {
-            return true
-        }
-
-        if (damage.finalDamage > 7.0) {
-            return true
-        }
-
-        if (damage.cause == EntityDamageEvent.DamageCause.FALL) {
-            return true
-        }
-
-        return false
+        return !event.player.combatTracker.isInCombat
     }
 
     fun onEntityDeath(event: EntityDeathEvent) {
         if (event.entity is EnderDragon) {
             manager.endSession(EndGameReason.DragonDefeated)
         }
+    }
+
+    fun revive(player: Player, roleIfNotPresent: Role.Builder): String {
+        val living = alivePlayers[player.uniqueId]
+        if (living != null) {
+            return "Player already alive"
+        }
+
+        val existing = allPlayers[player.uniqueId]
+        if (existing != null) {
+            mutableDeadPlayers.remove(player.uniqueId)
+            mutableAlivePlayers[player.uniqueId] = existing
+
+            initPlayer(existing.onlineSessionPlayer!!)
+
+            return "Player brought back"
+        }
+
+        val sessionPlayer = SessionPlayer(
+            uniqueId = player.uniqueId,
+            name = player.name,
+            role = roleIfNotPresent.build(),
+            server = server
+        )
+
+        mutableAllPlayers[player.uniqueId] = sessionPlayer
+        mutableAlivePlayers[player.uniqueId] = sessionPlayer
+
+        initPlayer(sessionPlayer.onlineSessionPlayer!!)
+
+        return "Player brought back with role"
     }
 
     fun onPlayerChat(event: AsyncChatEvent) {
@@ -619,7 +668,7 @@ class Session(
             server.consoleSender.sendMessage(Component.text("☠ <${player.name}> $message").color(Colors.LIGHT_GRAY.textColor))
             for (listener in server.onlinePlayers) {
                 if (listener.gameMode == GameMode.SPECTATOR) {
-                    player.sendMessage(Component.text("☠ <${player.name}> $message").color(Colors.LIGHT_GRAY.textColor))
+                    listener.sendMessage(Component.text("☠ <${player.name}> $message").color(Colors.LIGHT_GRAY.textColor))
                 }
             }
         } else {
@@ -869,7 +918,7 @@ class Session(
     }
 
     fun onPlayerJoin(player: Player) {
-        val sessionPlayer = getLivingPlayer(player.uniqueId)
+        val sessionPlayer = alivePlayers[player.uniqueId]
 
         for (player in server.onlinePlayers) {
             updatePlayerList(player)
@@ -893,6 +942,14 @@ class Session(
 
         if (event.entity.uniqueId == UUID.fromString(cannotPickup)) {
             event.isCancelled = true
+            return
+        }
+
+        alivePlayers[event.entity.uniqueId]?.onlineSessionPlayer?.let { sessionPlayer ->
+            if (sessionPlayer.role.itemPickup(this, sessionPlayer, event.item.itemStack, event.item)) {
+                event.isCancelled = true
+                return
+            }
         }
     }
 
@@ -909,6 +966,13 @@ class Session(
 
         if (event.itemDrop.itemStack.persistentDataContainer.has(ItemStacks.ROLE_EQUIPMENT_KEY)) {
             event.isCancelled = true
+        }
+
+        alivePlayers[event.player.uniqueId]?.onlineSessionPlayer?.let { sessionPlayer ->
+            if (sessionPlayer.role.itemDropped(this, sessionPlayer, event.itemDrop.itemStack, event.itemDrop)) {
+                event.isCancelled = true
+                return
+            }
         }
     }
 
@@ -942,10 +1006,10 @@ class Session(
         if (playerAlive && targetIsBell) {
             if (activeMeeting == null && meetingNotOnCooldown) {
                 startMeeting()
-                player.swingHand(hand)
+                player.swingHand(EquipmentSlot.HAND)
             } else if (activeMeeting != null) {
                 activeMeeting!!.onBellClicked(player)
-                player.swingHand(hand)
+                player.swingHand(EquipmentSlot.HAND)
             }
             return true
         }
@@ -991,13 +1055,6 @@ class Session(
         }
 
         return false
-    }
-
-    fun blockCanBeChanged(blockLocation: Location): Boolean {
-        if (blockLocation.isSameBlockAs(settings.bellLocation))
-            return false
-
-        return true
     }
 
     fun onVote(voter: Player, vote: Vote): Component {

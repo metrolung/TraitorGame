@@ -1,14 +1,14 @@
 package io.github.metrolung.traitorgame
 
-import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
-import org.bukkit.Bukkit
+import org.bukkit.NamespacedKey
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.InventoryHolder
 import org.bukkit.inventory.ItemStack
+import kotlin.text.iterator
 
 interface GuiHolder : InventoryHolder {
-    val key: Key
+    val key: NamespacedKey
 
     val layout: String
     val rows: Int

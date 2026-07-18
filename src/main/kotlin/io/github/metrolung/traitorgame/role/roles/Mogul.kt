@@ -7,30 +7,32 @@ import io.github.metrolung.traitorgame.ItemStacks
 import io.github.metrolung.traitorgame.OnlineSessionPlayer
 import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.SessionPlayer
-import io.github.metrolung.traitorgame.TraitorGamePlugin
 import io.github.metrolung.traitorgame.colored
 import io.github.metrolung.traitorgame.component
-import io.github.metrolung.traitorgame.role.Neutral
+import io.github.metrolung.traitorgame.role.PassiveNeutral
 import io.github.metrolung.traitorgame.role.RoleSettings
 import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.datacomponent.item.PotionContents
-import net.kyori.adventure.key.Key
-import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import org.bukkit.Location
 import org.bukkit.Material
-import org.bukkit.NamespacedKey
+import org.bukkit.entity.Player
 import org.bukkit.event.inventory.InventoryAction
-import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
-import org.bukkit.persistence.PersistentDataType
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
 import org.bukkit.potion.PotionType
+import xyz.xenondevs.invui.dsl.ExperimentalDslApi
+import xyz.xenondevs.invui.dsl.gui
+import xyz.xenondevs.invui.dsl.stonecutterWindow
+import xyz.xenondevs.invui.gui.Gui
+import xyz.xenondevs.invui.gui.set
+import xyz.xenondevs.invui.item.Item
+import kotlin.also
 import kotlin.math.min
 import kotlin.random.Random
 
-class Mogul : Neutral {
+class Mogul : PassiveNeutral {
     override val name: String
         get() = "Mogul"
 
@@ -48,130 +50,150 @@ class Mogul : Neutral {
         return "You have no allegiances. Collect $${roleSettings.mogulMoneyGoal / 100.0} to win."
     }
 
+    var cashAtLastSale = 0L
     var totalCash = 0L
-    var recentCash = 0L
+
     var meansToDoThis: Int = -1
-    val boxMenu = MerchandiseBoxMenu()
-    val merchandiseList: MutableList<Merchandise?> = MutableList(14) { i ->
+    val merchandiseList: MutableList<Merchandise> = MutableList(14) { i ->
         possibleMerchandise.random().random()
-    }
+    }.apply { sortByDescending {
+        val item = it.itemProvider()
+        item.type.name + it.amount
+    } }
 
-    private fun valueOf(stack: ItemStack): Long? = when (stack.type) {
-        Material.AMETHYST_SHARD -> 1
-        Material.COPPER_NUGGET -> 1
+    private fun valueOf(stack: ItemStack?): Long {
+        var sum = 0L
 
-        Material.LAPIS_LAZULI -> 5
-        Material.LAPIS_BLOCK -> 45
-
-        Material.COPPER_INGOT -> 10
-        Material.COPPER_BLOCK -> 90
-
-        Material.GOLD_NUGGET -> 50
-        Material.COAL -> 50
-        Material.COAL_BLOCK -> 4_50
-
-        Material.EMERALD -> 1_00
-        Material.EMERALD_BLOCK -> 9_00
-        Material.IRON_NUGGET -> 1_00
-
-        Material.GOLD_INGOT -> 5_00
-        Material.GOLD_BLOCK -> 45_00
-        Material.IRON_INGOT -> 10_00
-        Material.IRON_BLOCK -> 90_00
-        Material.DIAMOND -> 40_00
-        Material.DIAMOND_BLOCK -> 360_00
-        Material.NETHERITE_INGOT -> 250_00
-        Material.NETHERITE_BLOCK -> 2250_00
-
-        else -> null
-    }
-
-
-    override fun handleInventoryClick(
-        session: Session,
-        sessionPlayer: OnlineSessionPlayer,
-        itemStack: ItemStack?,
-        cursor: ItemStack?,
-        guiHolder: GuiHolder?,
-        slot: Int,
-        action: InventoryAction
-    ): Boolean {
-        if (guiHolder is MerchandiseBoxMenu) {
-            if (action == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
-                val itemStack = itemStack ?: return true
-                val value = valueOf(itemStack) ?: return true
-
-                sessionPlayer.player.inventory.setItem(slot, null)
-                for (i in 0..<itemStack.amount) {
-                    session.server.scheduler.runTaskLater(session.plugin, { _ ->
-                        totalCash += value
-                        recentCash += value
-
-                        sessionPlayer.player.playSound(Sound.sound {
-                            it.source(Sound.Source.PLAYER)
-                            it.type(NamespacedKey.minecraft("block.note_block.bell"))
-                        })
-                    }, i.toLong())
-                }
-
-                return true
+        stack?.getData(DataComponentTypes.BUNDLE_CONTENTS)?.let { contents ->
+            for (itemStack in contents.contents()) {
+                sum += valueOf(itemStack)
             }
         }
 
-        return super.handleInventoryClick(session, sessionPlayer, itemStack, cursor, guiHolder, slot, action)
-    }
-
-    override fun handleGuiClick(
-        session: Session,
-        sessionPlayer: OnlineSessionPlayer,
-        itemStack: ItemStack?,
-        cursor: ItemStack?,
-        guiHolder: GuiHolder,
-        slot: Int,
-        action: InventoryAction
-    ): Boolean {
-        if (guiHolder is MerchandiseBoxMenu) {
-            if (slot == 13) {
-                val cursor = sessionPlayer.player.itemOnCursor
-                val value = valueOf(cursor) ?: return true
-
-                sessionPlayer.player.setItemOnCursor(null)
-
-                for (i in 0..<cursor.amount) {
-                    session.server.scheduler.runTaskLater(session.plugin, { _ ->
-                        totalCash += value
-                        recentCash += value
-
-                        sessionPlayer.player.playSound(Sound.sound {
-                            it.source(Sound.Source.PLAYER)
-                            it.type(NamespacedKey.minecraft("block.note_block.bell"))
-                        })
-                    }, i.toLong())
-                }
-
-                return true
+        stack?.getData(DataComponentTypes.CONTAINER)?.let { contents ->
+            for (itemStack in contents.contents()) {
+                sum += valueOf(itemStack)
             }
-
-
-            val index = itemStack?.persistentDataContainer?.get(ItemStacks.MERCHANDISE_INDEX_KEY, PersistentDataType.INTEGER) ?: return true
-            if (meansToDoThis != index) {
-                meansToDoThis = index
-                return true
-            }
-            meansToDoThis = -1
-
-            val merchandise = merchandiseList[index] ?: return true
-            merchandiseList[index] = null
-            boxMenu.update(session)
-
-            val dropped = sessionPlayer.player.dropItem(merchandise.itemProvider()) ?: return true
-            dropped.persistentDataContainer.set(TraitorGamePlugin.key("cannot_pickup"), PersistentDataType.STRING, sessionPlayer.uniqueId.toString())
-
-            return true
         }
 
-        return super.handleGuiClick(session, sessionPlayer, itemStack, cursor, guiHolder, slot, action)
+        sum += when (stack?.type) {
+            Material.AMETHYST_SHARD -> 1
+            Material.COPPER_NUGGET -> 1
+
+            Material.LAPIS_LAZULI -> 5
+            Material.LAPIS_BLOCK -> 45
+
+            Material.COPPER_INGOT -> 10
+            Material.COPPER_BLOCK -> 90
+
+            Material.GOLD_NUGGET -> 50
+            Material.COAL -> 50
+            Material.COAL_BLOCK -> 4_50
+
+            Material.EMERALD -> 1_00
+            Material.EMERALD_BLOCK -> 9_00
+            Material.IRON_NUGGET -> 1_00
+
+            Material.GOLD_INGOT -> 5_00
+            Material.GOLD_BLOCK -> 45_00
+            Material.IRON_INGOT -> 10_00
+            Material.IRON_BLOCK -> 90_00
+            Material.DIAMOND -> 40_00
+            Material.DIAMOND_BLOCK -> 360_00
+            Material.NETHERITE_INGOT -> 250_00
+            Material.NETHERITE_BLOCK -> 2250_00
+
+            else -> 0
+        } * (stack?.amount ?: 0)
+
+        return sum
     }
+
+//    override fun handleInventoryClick(
+//        session: Session,
+//        sessionPlayer: OnlineSessionPlayer,
+//        itemStack: ItemStack?,
+//        cursor: ItemStack?,
+//        guiHolder: GuiHolder?,
+//        slot: Int,
+//        action: InventoryAction
+//    ): Boolean {
+//        if (guiHolder is MerchandiseBoxMenu) {
+//            if (action == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+//                val itemStack = itemStack ?: return true
+//                val value = valueOf(itemStack) ?: return true
+//
+//                sessionPlayer.player.inventory.setItem(slot, null)
+//                for (i in 0..<itemStack.amount) {
+//                    session.server.scheduler.runTaskLater(session.plugin, { _ ->
+//                        totalCash += value
+//                        recentCash += value
+//
+//                        sessionPlayer.player.playSound(Sound.sound {
+//                            it.source(Sound.Source.PLAYER)
+//                            it.type(NamespacedKey.minecraft("block.note_block.bell"))
+//                        })
+//                    }, i.toLong())
+//                }
+//
+//                return true
+//            }
+//        }
+//
+//        return super.handleInventoryClick(session, sessionPlayer, itemStack, cursor, guiHolder, slot, action)
+//    }
+//
+//    override fun handleGuiClick(
+//        session: Session,
+//        sessionPlayer: OnlineSessionPlayer,
+//        itemStack: ItemStack?,
+//        cursor: ItemStack?,
+//        guiHolder: GuiHolder,
+//        slot: Int,
+//        action: InventoryAction
+//    ): Boolean {
+//        if (guiHolder is MerchandiseBoxMenu) {
+//            if (slot == 13) {
+//                val cursor = sessionPlayer.player.itemOnCursor
+//                val value = valueOf(cursor) ?: return true
+//
+//                sessionPlayer.player.setItemOnCursor(null)
+//
+//                for (i in 0..<cursor.amount) {
+//                    session.server.scheduler.runTaskLater(session.plugin, { _ ->
+//                        totalCash += value
+//                        recentCash += value
+//
+//                        sessionPlayer.player.playSound(Sound.sound {
+//                            it.source(Sound.Source.PLAYER)
+//                            it.type(NamespacedKey.minecraft("block.note_block.bell"))
+//                        })
+//                    }, i.toLong())
+//                }
+//
+//                return true
+//            }
+//
+//
+//            val index = itemStack?.persistentDataContainer?.get(ItemStacks.MERCHANDISE_INDEX_KEY, PersistentDataType.INTEGER) ?: return true
+//            if (meansToDoThis != index) {
+//                meansToDoThis = index
+//                return true
+//            }
+//            meansToDoThis = -1
+//
+//            val merchandise = merchandiseList[index] ?: return true
+//            merchandiseList[index] = null
+//            boxMenu.update(session)
+//
+//            val dropped = sessionPlayer.player.dropItem(merchandise.itemProvider()) ?: return true
+//            dropped.persistentDataContainer.set(TraitorGamePlugin.key("cannot_pickup"), PersistentDataType.STRING, sessionPlayer.uniqueId.toString())
+//
+//            return true
+//        }
+//
+//        return super.handleGuiClick(session, sessionPlayer, itemStack, cursor, guiHolder, slot, action)
+//    }
 
     override fun onRolePresented(session: Session, sessionPlayer: OnlineSessionPlayer) {
         sessionPlayer.player.give(ItemStacks.merchandiseBox)
@@ -186,8 +208,9 @@ class Mogul : Neutral {
     ): Boolean {
         when (equipmentType) {
             "merchandise_box" -> {
-                boxMenu.update(session)
-                sessionPlayer.player.openInventory(boxMenu.inventory)
+                openGui(sessionPlayer.player)
+//                boxMenu.update(session)
+//                sessionPlayer.player.openInventory(boxMenu.inventory)
                 return true
             }
         }
@@ -196,16 +219,21 @@ class Mogul : Neutral {
     }
 
     override fun onTickOnline(session: Session, sessionPlayer: OnlineSessionPlayer, tick: Int) {
-        if (!session.roleShown) {
-            return
+        if (tick % 10 == 0) {
+            updateCash(sessionPlayer.player)
         }
 
-        sessionPlayer.player.sendActionBar(
-            Component.text {
-                it.append("$${String.format("%.2f", totalCash/100.0)}".colored(Colors.VERY_YELLOW))
-                it.append(" (recent: $${String.format("%.2f", recentCash/100.0)})".colored(Colors.MID_GRAY))
-            }
-        )
+
+        if (session.roleShown) {
+            sessionPlayer.player.sendActionBar(
+                Component.text {
+                    it.append("$${String.format("%.2f", totalCash/100.0)}".colored(Colors.VERY_YELLOW))
+                    it.append(" (recent: $${String.format("%.2f", (totalCash-cashAtLastSale)/100.0)})".colored(Colors.MID_GRAY))
+                }
+            )
+        }
+
+        super.onTickOnline(session, sessionPlayer, tick)
     }
 
     companion object {
@@ -288,46 +316,69 @@ class Mogul : Neutral {
         )
     }
 
-    inner class MerchandiseBoxMenu : GuiHolder {
-        override var inventoryCache: Inventory? = null
-
-        override val key: Key
-            get() = TraitorGamePlugin.key("merchandise_box")
-
-        override val layout = """
-            X X X X X X X X X
-            X X X / _ / X X X
-            X X X X X X X X X
-            X - - - - - - - X
-            X - - - - - - - X
-            X X X X X X X X X
-        """.trimIndent()
-
-        override val rows = 6
-        override val name = "Merchandise Box".component
-
-        var merchandiseIndex: Int = 0
-
-        override fun onRender() {
-            merchandiseIndex = 0
-        }
-
-        override fun getItemAt(ch: Char, slot: Int): ItemStack? {
-            return when (ch) {
-                '-' -> {
-                    val oldIndex = merchandiseIndex
-                    merchandiseIndex++
-
-                    val merchandise = this@Mogul.merchandiseList.getOrNull(oldIndex) ?: return null
-                    val material = merchandise.itemProvider().type
-
-                    ItemStacks.merchandise(merchandise.name, merchandise.amount, material, oldIndex)
-                }
-                'X' -> ItemStacks.Gui.blackGlass
-                '/' -> ItemStacks.Gui.yellowGlass
-                '_' -> ItemStacks.moneyBag
-                else -> null
-            }
+    fun updateCash(player: Player, purchaseMade: Boolean = false) {
+        totalCash = player.inventory.sumOf { valueOf(it) }
+        if (purchaseMade) {
+            cashAtLastSale = totalCash
         }
     }
+
+    @OptIn(ExperimentalDslApi::class)
+    fun openGui(player: Player) {
+        stonecutterWindow(player) {
+            buttonsGui by Gui.empty(4, Math.ceilDiv(merchandiseList.size, 4)).also { gui ->
+                for (i in merchandiseList.indices) {
+                    val merchandise = merchandiseList[i]
+                    val item = merchandise.itemProvider()
+
+                    gui[i] = Item.simple(ItemStacks.merchandise(merchandise.name, merchandise.amount, item.type))
+                }
+            }
+            upperGui by gui("ab") {
+            }
+        }.open()
+    }
+
+//    inner class MerchandiseBoxMenu : GuiHolder {
+//        override var inventoryCache: Inventory? = null
+//
+//        override val key: NamespacedKey
+//            get() = TraitorGamePlugin.key("merchandise_box")
+//
+//        override val layout = """
+//            X X X X X X X X X
+//            X X X / _ / X X X
+//            X X X X X X X X X
+//            X - - - - - - - X
+//            X - - - - - - - X
+//            X X X X X X X X X
+//        """.trimIndent()
+//
+//        override val rows = 6
+//        override val name = "Merchandise Box".component
+//
+//        var merchandiseIndex: Int = 0
+//
+//        override fun onRender() {
+//            merchandiseIndex = 0
+//        }
+//
+//        override fun getItemAt(ch: Char, slot: Int): ItemStack? {
+//            return when (ch) {
+//                '-' -> {
+//                    val oldIndex = merchandiseIndex
+//                    merchandiseIndex++
+//
+//                    val merchandise = this@Mogul.merchandiseList.getOrNull(oldIndex) ?: return null
+//                    val material = merchandise.itemProvider().type
+//
+//                    ItemStacks.merchandise(merchandise.name, merchandise.amount, material, oldIndex)
+//                }
+//                'X' -> ItemStacks.Gui.blackGlass
+//                '/' -> ItemStacks.Gui.yellowGlass
+//                '_' -> ItemStacks.moneyBag
+//                else -> null
+//            }
+//        }
+//    }
 }

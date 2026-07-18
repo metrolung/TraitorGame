@@ -6,13 +6,14 @@ import io.github.metrolung.traitorgame.OnlineSessionPlayer
 import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.colored
+import io.github.metrolung.traitorgame.role.EvilNeutral
 import io.github.metrolung.traitorgame.role.Neutral
 import io.github.metrolung.traitorgame.role.RoleSettings
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
 import kotlin.time.Duration.Companion.seconds
 
-class Jester : Neutral {
+class Jester : EvilNeutral {
     var punishmentRemaining: Int = 0
     var hasBeenPunished: Boolean = false
 
@@ -73,22 +74,5 @@ class Jester : Neutral {
         sessionPlayer.player.sendActionBar(
             "Don't die for the next ${(punishmentRemaining / 20.0).toInt().seconds}".colored(Colors.VERY_YELLOW)
         )
-
-//        if (tick % 30 == 0) {
-//            for (player in session.server.onlinePlayers) {
-//                if (player.gameMode == GameMode.SPECTATOR) {
-//                    val offset = 3.0
-//                    sessionPlayer.player.spawnParticle(
-//                        Particle.SCULK_SOUL,
-//                        player.location,
-//                        1,
-//                        offset,
-//                        offset,
-//                        offset,
-//                        0.05
-//                    )
-//                }
-//            }
-//        }
     }
 }

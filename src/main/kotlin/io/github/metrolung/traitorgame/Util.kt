@@ -16,9 +16,6 @@ import org.joml.Vector3f
 
 val INTERACTION_PASSTHROUGH_KEY = TraitorGamePlugin.key("passthrough")
 
-val FloodgateApi: FloodgateApi
-    get() = org.geysermc.floodgate.api.FloodgateApi.getInstance()
-
 val MiniMessage: MiniMessage
     get() = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
 

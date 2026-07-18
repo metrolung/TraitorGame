@@ -48,7 +48,7 @@ class VoteCommand(private val plugin: TraitorGamePlugin) {
 
         val voted = executor.server.getOfflinePlayer(playerName)
 
-        val votedSessionPlayer = session.getLivingPlayer(voted.uniqueId) ?: run {
+        val votedSessionPlayer = session.alivePlayers[voted.uniqueId] ?: run {
             ctx.source.sender.sendPlainMessage("Could not find player")
             return Command.SINGLE_SUCCESS
         }

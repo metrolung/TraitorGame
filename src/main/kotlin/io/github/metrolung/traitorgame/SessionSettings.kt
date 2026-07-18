@@ -20,7 +20,13 @@ data class SessionSettings(
     val roleSettings: RoleSettings
 ) {
     companion object {
-        fun create(plugin: Plugin, traitorCount: Int, neutralCount: Int, bellLocation: Location): SessionSettings {
+        fun create(
+            plugin: TraitorGamePlugin,
+            traitorCount: Int,
+            passiveNeutralCount: Int,
+            evilNeutralCount: Int,
+            bellLocation: Location
+        ): SessionSettings {
             val config = plugin.config
 
             return SessionSettings(
@@ -32,7 +38,7 @@ data class SessionSettings(
                 chatRange = config.getDouble("chat.range"),
                 chatFalloff = config.getDouble("chat.falloff"),
                 blockDampening = config.getDouble("chat.block-dampening"),
-                roleSettings = RoleSettings.create(plugin, traitorCount, neutralCount)
+                roleSettings = RoleSettings.create(plugin, traitorCount, passiveNeutralCount, evilNeutralCount)
             )
         }
     }
