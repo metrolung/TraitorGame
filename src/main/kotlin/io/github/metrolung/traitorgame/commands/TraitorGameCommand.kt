@@ -59,7 +59,7 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
                     ) }
                     .then(Commands.argument("role", ArgumentTypes.namespacedKey())
                         .suggests { context, builder ->
-                            for (key in plugin.roles.keys) {
+                            for (key in plugin.roleManager.keys) {
                                 builder.suggest(key.toString())
                             }
                             builder.buildFuture()
@@ -97,10 +97,11 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
             return Command.SINGLE_SUCCESS
         }
 
+        val survivor = plugin.roleManager.getRoleConfiguration(TraitorGamePlugin.key("survivor"))!!
         val role = if (roleKey == null) {
-            plugin.roles[TraitorGamePlugin.key("survivor")]!!
+            survivor.settings
         } else {
-            plugin.roles[roleKey] ?: plugin.roles[TraitorGamePlugin.key("survivor")]!!
+            plugin.roleManager.getRoleConfiguration(roleKey)?.settings ?: survivor.settings
         }
 
         for (player in players) {
@@ -122,7 +123,10 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
         }
 
         plugin.sessionManager.startSession(
-            plugin.server, plugin, SessionSettings.create(
+            plugin.server,
+            plugin,
+            plugin.roleManager,
+            SessionSettings.create(
                 plugin,
                 traitorCount,
                 passiveNeutralCount,

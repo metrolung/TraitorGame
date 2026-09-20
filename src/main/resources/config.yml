@@ -6,6 +6,7 @@ gameplay:
   discussion-time: 30
   voting-time: 90
   entity-damage-factor: 0.35
+  end-if-no-evil: true
 
 role:
   astral:

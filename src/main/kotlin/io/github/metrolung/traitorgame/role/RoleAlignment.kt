@@ -13,28 +13,6 @@ enum class RoleAlignment {
     PASSIVE_NEUTRAL,
     SURVIVOR;
 
-//    val winSound: Sound
-//        get() = Sound.sound {
-//            when (this) {
-//                TRAITOR -> {
-//                    it.type(NamespacedKey.minecraft("item.goat_horn.sound.2"))
-//                    it.source(Sound.Source.AMBIENT)
-//                }
-//                EVIL_NEUTRAL -> {
-//                    it.type(NamespacedKey.minecraft("item.goat_horn.sound.2"))
-//                    it.source(Sound.Source.AMBIENT)
-//                }
-//                PASSIVE_NEUTRAL -> {
-//                    it.type(NamespacedKey.minecraft("item.goat_horn.sound.0"))
-//                    it.source(Sound.Source.AMBIENT)
-//                }
-//                SURVIVOR -> {
-//                    it.type(NamespacedKey.minecraft("item.goat_horn.sound.1"))
-//                    it.source(Sound.Source.AMBIENT)
-//                }
-//            }
-//        }
-
     val isTraitor: Boolean
         get() = this == TRAITOR
 
@@ -55,14 +33,6 @@ enum class RoleAlignment {
 
     val isNeutral: Boolean
         get() = this.isPassiveNeutral || this.isEvilNeutral
-
-//    val winMessage: TextComponent
-//        get() = when (this) {
-//            TRAITOR -> "Traitors Win!".colored(Colors.TRAITOR_RED)
-//            EVIL_NEUTRAL -> "Neutral Win".colored(Colors.NEUTRAL_YELLOW)
-//            PASSIVE_NEUTRAL -> "Neutral Win".colored(Colors.NEUTRAL_YELLOW)
-//            SURVIVOR -> "Survivors Win!".colored(Colors.SURVIVOR_TEAL)
-//        }
 
     val stylized: TextComponent
         get() = when (this) {

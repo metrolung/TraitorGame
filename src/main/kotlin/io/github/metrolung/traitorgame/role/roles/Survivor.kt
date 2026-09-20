@@ -4,23 +4,13 @@ import io.github.metrolung.traitorgame.Colors
 import io.github.metrolung.traitorgame.EndGameReason
 import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.SessionPlayer
+import io.github.metrolung.traitorgame.TraitorGamePlugin
 import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.role.RoleAlignment
-import io.github.metrolung.traitorgame.role.RoleSettings
+import org.bukkit.Material
+import xyz.xenondevs.invui.item.ItemBuilder
 
 interface Survivor : Role {
-    override val roleColor: Int
-        get() = Colors.SURVIVOR_TEAL
-
-    override val alignment: RoleAlignment
-        get() = RoleAlignment.SURVIVOR
-
-    override val isEvil: Boolean
-        get() = false
-
-    override fun getGoal(roleSettings: RoleSettings): String {
-        return "Defeat the enderdragon and don't die!"
-    }
 
     override fun isWinner(session: Session, sessionPlayer: SessionPlayer, endGameReason: EndGameReason): Boolean {
         if (endGameReason is EndGameReason.SurvivorWin) {
@@ -33,9 +23,22 @@ interface Survivor : Role {
 
         return super.isWinner(session, sessionPlayer, endGameReason)
     }
+
+    override val settings: Role.Settings
+        get() = SETTINGS
+
+    companion object {
+        @JvmField
+        val SETTINGS: Role.Settings = Role.Settings(
+            key = TraitorGamePlugin.key("survivor"),
+            name = "Survivor",
+            roleColor = Colors.SURVIVOR_TEAL,
+            alignment = RoleAlignment.SURVIVOR,
+            itemProvider = ItemBuilder(Material.DIAMOND),
+            goalProvider = { "Defeat the Ender Dragon and don't die!" },
+            builder = { Survivor() }
+        )
+    }
 }
 
-fun Survivor() = object : Survivor {
-    override val name: String
-        get() = "Survivor"
-}
+fun Survivor() = object : Survivor {}

@@ -1,44 +1,33 @@
 package io.github.metrolung.traitorgame.role
 
 import io.github.metrolung.traitorgame.EndGameReason
-import io.github.metrolung.traitorgame.GuiHolder
 import io.github.metrolung.traitorgame.Meeting
 import io.github.metrolung.traitorgame.OnlineSessionPlayer
 import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.Vote
-import io.github.metrolung.traitorgame.textColor
-import net.kyori.adventure.text.Component
+import io.github.metrolung.traitorgame.colored
 import net.kyori.adventure.text.TextComponent
 import org.bukkit.Location
+import org.bukkit.NamespacedKey
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Item
-import org.bukkit.event.inventory.InventoryAction
-import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemStack
+import xyz.xenondevs.invui.item.ItemProvider
 
 interface Role {
-    val roleColor: Int
-    val name: String
-    val stylized: TextComponent
-        get() = Component.text(name).color(roleColor.textColor)
+//    val alignment: RoleAlignment
+//    val isEvil: Boolean
 
-    val alignment: RoleAlignment
-
-    val isEvil: Boolean
+    val settings: Settings
 
     fun isWinner(session: Session, sessionPlayer: SessionPlayer, endGameReason: EndGameReason): Boolean = false
 
-    fun getGoal(roleSettings: RoleSettings): String
-
-
-    fun handleGuiClick(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack?, cursor: ItemStack?, guiHolder: GuiHolder, slot: Int, action: InventoryAction): Boolean = false
-    fun handleInventoryClick(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack?, cursor: ItemStack?, guiHolder: GuiHolder?, slot: Int, action: InventoryAction): Boolean = false
     fun itemPickup(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, entity: Item): Boolean = false
     fun itemDropped(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, entity: Item): Boolean = false
 
     fun handleEquipmentUse(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, equipmentType: String, block: Location?): Boolean = false
-    fun handleEquipmentInventoryClick(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, equipmentType: String, action: InventoryAction): Boolean = false
+
     fun handleEquipmentDropped(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, equipmentType: String, itemEntity: Item): Boolean = false
     fun handleEquipmentUseOnEntity(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, equipmentType: String, entity: Entity): Boolean = false
     fun handleMaterialUse(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, materialType: String, block: Location?): Boolean = false
@@ -60,5 +49,21 @@ interface Role {
         fun build(): Role
     }
 
-    data class Setting(val amount: Int, val chance: Double, val alignment: RoleAlignment, val builder: Builder)
+    data class Settings(
+        val key: NamespacedKey,
+        val name: String,
+        val roleColor: Int,
+        val stylized: TextComponent = name.colored(roleColor),
+        val alignment: RoleAlignment,
+        val itemProvider: ItemProvider,
+        val goalProvider: (RoleSettings) -> String,
+        val builder: Builder,
+    )
+
+//    data class Setting(
+//        val amount: Int,
+//        val chance: Double,
+//        val alignment: RoleAlignment,
+//        val info: Info,
+//    )
 }

@@ -11,7 +11,6 @@ import net.kyori.adventure.title.TitlePart
 import org.bukkit.Location
 import org.bukkit.NamespacedKey
 import org.bukkit.Server
-import org.bukkit.WorldBorder
 import org.bukkit.entity.Player
 import org.bukkit.entity.TextDisplay
 import org.bukkit.potion.PotionEffect
@@ -94,7 +93,7 @@ class Meeting(
                     .append(Component
                         .text("[ VOTE ]")
                         .color(Colors.VERY_GREEN.textColor)
-                        .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:vote player ${alivePlayer.name}"))
+                        .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.NAMESPACE}:vote player ${alivePlayer.name}"))
                     )
             )
         }
@@ -106,13 +105,13 @@ class Meeting(
             .append(Component
                 .text("[ SKIP ]")
                 .color(Colors.ORANGE.textColor)
-                .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:vote skip"))
+                .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.NAMESPACE}:vote skip"))
             )
             .append(Component.text("   |   ").color(Colors.LIGHT_GRAY.textColor))
             .append(Component
                 .text("[ END GAME ]")
                 .color(Colors.VERY_RED.textColor)
-                .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:vote end"))
+                .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.NAMESPACE}:vote end"))
             )
         )
 
@@ -129,8 +128,8 @@ class Meeting(
             .content("Players")
 
         val commands = mutableListOf(
-            "${TraitorGamePlugin.namespace}:vote skip",
-            "${TraitorGamePlugin.namespace}:vote end",
+            "${TraitorGamePlugin.NAMESPACE}:vote skip",
+            "${TraitorGamePlugin.NAMESPACE}:vote end",
         )
 
         for ((_, alivePlayer) in session.alivePlayers) {
@@ -149,7 +148,7 @@ class Meeting(
             } else {
                 form.button(voteText, FormImage.Type.URL, "https://cravatar.eu/head/${alivePlayer.uniqueId}")
             }
-            commands.add("${TraitorGamePlugin.namespace}:vote player ${alivePlayer.name}")
+            commands.add("${TraitorGamePlugin.NAMESPACE}:vote player ${alivePlayer.name}")
         }
 
         form.validResultHandler { response ->
@@ -173,7 +172,7 @@ class Meeting(
                     Component
                         .text("Return back to your previous location? ")
                         .color(Colors.LAVENDER.textColor)
-                        .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.namespace}:back"))
+                        .clickEvent(ClickEvent.runCommand("${TraitorGamePlugin.NAMESPACE}:back"))
                         .append(
                             Component
                                 .text("[click]")
@@ -195,7 +194,7 @@ class Meeting(
 
         form.validResultHandler { response ->
             if (response.clickedFirst()) {
-                player.performCommand("${TraitorGamePlugin.namespace}:back")
+                player.performCommand("${TraitorGamePlugin.NAMESPACE}:back")
             }
         }
 
@@ -369,7 +368,7 @@ class Meeting(
         }
     }
 
-    fun cleanup() {
+    fun deinit() {
         val worldBorder = session.settings.bellLocation.world.worldBorder
 
         if (oldWorldBorderSize == null || oldWorldBorderCenter == null) {
@@ -383,8 +382,6 @@ class Meeting(
     private fun endMeeting() {
         this.state = State.Finished
         onMeetingEnd()
-
-        cleanup()
 
         for ((_, sessionPlayer) in session.alivePlayers) {
             sessionPlayer.role.onMeetingEnd(this.session, this, sessionPlayer, turnout ?: mapOf())

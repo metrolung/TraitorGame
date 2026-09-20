@@ -5,9 +5,11 @@ import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Location
+import org.bukkit.OfflinePlayer
 import org.bukkit.attribute.Attribute
 import org.bukkit.entity.Player
 import org.bukkit.inventory.EquipmentSlot
+import org.bukkit.scoreboard.Team
 import org.bukkit.util.Transformation
 import org.geysermc.floodgate.api.FloodgateApi
 import org.joml.AxisAngle4f
@@ -82,3 +84,20 @@ fun Player.resetStats(
             }
         }
 }
+
+fun Player.setNametagVisibility(shown: Boolean) {
+    val scoreboard = scoreboard
+    val team = scoreboard.getTeam("nametag_hidden") ?: scoreboard.registerNewTeam("nametag_hidden")
+    team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER)
+    if (shown)
+        team.removePlayer(this)
+    else
+        team.addPlayer(this)
+}
+
+operator fun Int.times(boolean: Boolean): Int = if (boolean) this else 0
+operator fun Long.times(boolean: Boolean): Long = if (boolean) this else 0
+operator fun Byte.times(boolean: Boolean): Byte = if (boolean) this else 0
+operator fun Short.times(boolean: Boolean): Short = if (boolean) this else 0
+operator fun Float.times(boolean: Boolean): Float = if (boolean) this else 0F
+operator fun Double.times(boolean: Boolean): Double = if (boolean) this else 0.0

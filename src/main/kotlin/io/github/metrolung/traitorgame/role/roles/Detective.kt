@@ -9,7 +9,11 @@ import io.github.metrolung.traitorgame.SessionCorpse
 import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.TraitorGamePlugin
 import io.github.metrolung.traitorgame.Vote
-import io.github.metrolung.traitorgame.role.RoleSettings
+import io.github.metrolung.traitorgame.api.Floodgate
+import io.github.metrolung.traitorgame.colored
+import io.github.metrolung.traitorgame.component
+import io.github.metrolung.traitorgame.role.Role
+import io.github.metrolung.traitorgame.role.RoleAlignment
 import io.github.metrolung.traitorgame.textColor
 import net.kyori.adventure.inventory.Book
 import net.kyori.adventure.sound.Sound
@@ -19,15 +23,28 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.entity.Entity
+import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
-import org.bukkit.inventory.meta.BundleMeta
+import org.bukkit.inventory.ItemType
 import org.bukkit.persistence.PersistentDataType
+import xyz.xenondevs.commons.provider.MutableProvider
+import xyz.xenondevs.commons.provider.mutableProvider
+import xyz.xenondevs.invui.dsl.ExperimentalDslApi
+import xyz.xenondevs.invui.dsl.gui
+import xyz.xenondevs.invui.dsl.item
+import xyz.xenondevs.invui.dsl.window
+import xyz.xenondevs.invui.gui.Gui
+import xyz.xenondevs.invui.gui.set
+import xyz.xenondevs.invui.inventory.VirtualInventory
+import xyz.xenondevs.invui.inventory.event.UpdateReason
+import xyz.xenondevs.invui.item.Item
+import xyz.xenondevs.invui.item.ItemBuilder
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.collections.iterator
-import kotlin.random.Random
+import kotlin.math.min
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -35,23 +52,17 @@ import kotlin.time.toJavaInstant
 
 class Detective : Survivor {
     val notes = mutableListOf<Pair<Instant, DetectiveNote>>()
-
-    override val roleColor: Int
-        get() = Colors.DETECTIVE_BLUE
-
-    override val name: String
-        get() = "Detective"
-
-    override fun getGoal(roleSettings: RoleSettings): String {
-        return "Track down and kill the traitors by any means."
-    }
+//    val scannerInventory = VirtualInventory(3*3)
+    val identifiedPlayers = mutableSetOf<UUID>()
+    val resultGui = Gui.empty(5, 2)
 
     override fun onRolePresented(session: Session, sessionPlayer: OnlineSessionPlayer) {
         sessionPlayer.player.give(ItemStacks.notebook)
         sessionPlayer.player.give(ItemStacks.detectiveCrossbow)
         sessionPlayer.player.give(ItemStack.of(Material.ARROW).apply { amount = 32 })
         sessionPlayer.player.give(ItemStacks.swab.apply { amount = 64 })
-        sessionPlayer.player.give(ItemStacks.swabChecker)
+        sessionPlayer.player.give(ItemStacks.sampleChecker)
+        identifiedPlayers.add(sessionPlayer.uniqueId)
     }
 
     override fun handleEquipmentUse(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, equipmentType: String, block: Location?): Boolean {
@@ -99,7 +110,7 @@ class Detective : Survivor {
 
                     if (corpse != null) {
                         val corpseName = session.deadPlayers[UUID.fromString(corpse)]?.player?.name ?: continue
-                        nearbySessionPlayers.add("☠ $corpseName's corpse")
+                        nearbySessionPlayers.add("☠ $corpseName")
                     }
                 }
 
@@ -111,65 +122,14 @@ class Detective : Survivor {
                 sessionPlayer.player.setCooldown(Material.BOOK, session.settings.roleSettings.detectiveNotebookCooldownTicks)
                 sessionPlayer.player.setCooldown(TraitorGamePlugin.key("notebook_cooldown"), session.settings.roleSettings.detectiveNotebookCooldownTicks)
 
-                addNote(sessionPlayer.sessionPlayer, DetectiveNote.SeenNear(
+                addNote(sessionPlayer.player, DetectiveNote.SeenNear(
                     sessionPlayer.player.location,
                     nearbySessionPlayers
                 ))
                 return true
             }
-            "swab_checker" -> {
-                val bundleContents = (itemStack.itemMeta as BundleMeta).items
-
-                if (bundleContents.size != 2) {
-                    sessionPlayer.player.sendMessage(
-                        Component
-                            .text("Swab checker requires exactly two used swabs!")
-                            .color(Colors.MID_GRAY.textColor)
-                    )
-                    return false
-                }
-
-                val swabIndex1 = bundleContents[0].persistentDataContainer.get(ItemStacks.USED_SWAB_KEY, PersistentDataType.INTEGER)
-                val swabIndex2 = bundleContents[1].persistentDataContainer.get(ItemStacks.USED_SWAB_KEY, PersistentDataType.INTEGER)
-
-                if (swabIndex1 == null || swabIndex2 == null) {
-                    sessionPlayer.player.sendMessage(
-                        Component
-                            .text("Swab checker requires used swabs!")
-                            .color(Colors.MID_GRAY.textColor)
-                    )
-                    return false
-                }
-
-                val (swabbedName1, swabbedPlayer1) = session.swabs[swabIndex1]
-                val (swabbedName2, swabbedPlayer2) = session.swabs[swabIndex2]
-
-                if (swabbedPlayer1.uniqueId == swabbedPlayer2.uniqueId) {
-                    session.server.playSound(Sound.sound {
-                        it.source(Sound.Source.PLAYER)
-                        it.pitch(2f)
-                        it.type(NamespacedKey.minecraft("block.note_block.bit"))
-                    })
-                    sessionPlayer.player.sendMessage(
-                        Component
-                            .text("A match is found between $swabbedName1 and $swabbedName2!")
-                            .color(Colors.VERY_GREEN.textColor)
-                    )
-                } else {
-                    sessionPlayer.player.sendMessage(
-                        Component
-                            .text("Inconclusive match between $swabbedName1 and $swabbedName2")
-                            .color(Colors.MID_GRAY.textColor)
-                    )
-                }
-
-                session.server.playSound(Sound.sound {
-                    it.source(Sound.Source.PLAYER)
-                    it.type(NamespacedKey.minecraft("item.bottle.fill"))
-                })
-
-                itemStack.editMeta { (it as BundleMeta).setItems(null) }
-
+            "sample_checker" -> {
+                openScannerGui(session, sessionPlayer.player)
                 return true
             }
         }
@@ -188,12 +148,11 @@ class Detective : Survivor {
             "swab" -> {
                 if (session.isPlayerAlive(entity.uniqueId)) {
                     val swabbed = session.alivePlayers[entity.uniqueId]!!
-                    session.swabs.add(swabbed.name to swabbed)
-
+                    session.samples.add(DNASample.IdentifiableSample(swabbed))
                     itemStack.amount -= 1
 
                     sessionPlayer.player.give(
-                        listOf(ItemStacks.usedSwab(Component.text("Swab of ${swabbed.name}"), session.swabs.size - 1)),
+                        listOf(ItemStacks.usedSwab(Component.text("Swab of ${swabbed.name}"), session.samples.size - 1)),
                         true
                     )
                 } else {
@@ -206,18 +165,18 @@ class Detective : Survivor {
 
                     itemStack.amount -= 1
 
-                    val swabbed = if (Random.nextBoolean() || corpsePlayer.contaminators.isEmpty()) {
-                        corpsePlayer.player
+                    val contaminators = corpsePlayer.contaminators.values.toList()
+                    if (contaminators.isNotEmpty()) {
+                        session.samples.add(DNASample.CorpseSample(corpsePlayer.player, contaminators))
                     } else {
-                        corpsePlayer.contaminators.values.random()
+                        session.samples.add(DNASample.IdentifiableCorpseSample(corpsePlayer.player))
                     }
-                    session.swabs.add("unknown DNA" to swabbed)
 
                     sessionPlayer.player.give(
                         listOf(
                             ItemStacks.usedSwab(
-                                Component.text("Swab of ${swabbed.name}'s Corpse"),
-                                session.swabs.size - 1
+                                Component.text("Swab of ${corpsePlayer.player.name}'s Corpse"),
+                                session.samples.size - 1
                             )
                         ),
                         true
@@ -266,7 +225,7 @@ class Detective : Survivor {
                 sessionPlayer.player.setCooldown(Material.BOOK, session.settings.roleSettings.detectiveNotebookCooldownTicks)
                 sessionPlayer.player.setCooldown(TraitorGamePlugin.key("notebook_cooldown"), session.settings.roleSettings.detectiveNotebookCooldownTicks)
 
-                addNote(sessionPlayer.sessionPlayer, DetectiveNote.Death(
+                addNote(sessionPlayer.player, DetectiveNote.Death(
                     sessionCorpse.player.name,
                     sessionCorpse.causeOfDeath,
                     sessionCorpse.timeOfDeath,
@@ -279,17 +238,17 @@ class Detective : Survivor {
     }
 
     override fun onMeetingEnd(session: Session, meeting: Meeting, sessionPlayer: SessionPlayer, turnout: Map<Vote, Int>) {
-        addNote(sessionPlayer, DetectiveNote.VoterTurnout(turnout))
+        addNote(sessionPlayer.player, DetectiveNote.VoterTurnout(turnout))
     }
 
     override fun onMeetingStart(session: Session, meeting: Meeting, sessionPlayer: SessionPlayer) {}
 
-    fun addNote(sessionPlayer: SessionPlayer, note: DetectiveNote) {
-        sessionPlayer.player?.playSound(Sound.sound {
+    fun addNote(player: Player?, note: DetectiveNote) {
+        player?.playSound(Sound.sound {
             it.source(Sound.Source.PLAYER)
             it.type(NamespacedKey.minecraft("item.book.page_turn"))
         })
-        sessionPlayer.player?.sendMessage(
+        player?.sendMessage(
             Component.text("Note written.").decorate(TextDecoration.ITALIC).color(
                 Colors.MID_GRAY.textColor))
         notes.add(Clock.System.now() to note)
@@ -298,6 +257,113 @@ class Detective : Survivor {
     }
 
 
+    @OptIn(ExperimentalDslApi::class)
+    fun openScannerGui(session: Session, player: Player) {
+        val itemSample: MutableProvider<DNASample?> = mutableProvider { null }
+
+        val useSlot = VirtualInventory(1)
+        useSlot.addPreUpdateHandler { event ->
+            val item = event.newItem
+            if (item == null) {
+                itemSample.set(null)
+                return@addPreUpdateHandler
+            }
+            val sample = item.persistentDataContainer.get(ItemStacks.SAMPLE_KEY, PersistentDataType.INTEGER)
+            if (sample == null) {
+                event.isCancelled = true
+                return@addPreUpdateHandler
+            }
+            itemSample.set(session.samples[sample])
+        }
+
+        window(player) {
+            upperGui by gui(
+                "# # # # # # # # #",
+                "# . # , , , , , #",
+                "# s # , , , , , #",
+                "# # # # # # # # #"
+            ) {
+                title by " ↓ sᴡᴀʙ ↓         Sample Checker".component
+
+                '#' by ItemStacks.Gui.whiteGlass
+                '.' by useSlot
+                ',' by resultGui
+                's' by item {
+                    itemProvider by itemSample.map { sample ->
+                        if (sample == null) {
+                            ItemBuilder(ItemType.RED_STAINED_GLASS_PANE)
+                                .setName("Cannot scan".colored(Colors.VERY_RED))
+                        } else {
+                            ItemBuilder(ItemType.LIME_STAINED_GLASS_PANE)
+                                .setName("Scan".colored(Colors.VERY_GREEN))
+                                .setLore(listOf(
+                                    "Warning! ".colored(Colors.VERY_RED).append("This consumes the swab!".colored(Colors.WHITE)),
+                                ))
+                        }
+                    }
+
+                    onClick {
+                        itemSample.get()?.let { sample ->
+                            useSlot.setItem(UpdateReason.SUPPRESSED, 0, null)
+                            when (sample) {
+                                is DNASample.IdentifiableSample -> {
+                                    identifiedPlayers.add(sample.player.uniqueId)
+                                    resultGui.fill(null)
+                                    resultGui[0] = Item.simple(ItemStacks.Gui.identifiedPlayer(
+                                        sample.player.name.colored(Colors.VERY_GREEN),
+                                        sample.player.uniqueId
+                                    ))
+                                }
+                                is DNASample.IdentifiableCorpseSample -> {
+                                    identifiedPlayers.add(sample.player.uniqueId)
+                                    resultGui.fill(null)
+                                    resultGui[0] = Item.simple(ItemStacks.Gui.identifiedPlayer(
+                                        sample.player.name.colored(Colors.VERY_GREEN),
+                                        sample.player.uniqueId
+                                    ))
+                                }
+                                is DNASample.CorpseSample -> {
+                                    resultGui.fill(null)
+                                    val backing = (sample.potentials + sample.corpse).shuffled()
+                                    val players = backing.subList(0, min(backing.size, 10))
+                                    player.sendMessage("seen near corpse")
+                                    addNote(player, DetectiveNote.SeenNearCorpse(
+                                        sample.corpse.name,
+                                        sample.potentials.map {
+                                            if (identifiedPlayers.contains(it.uniqueId))
+                                                it.name
+                                            else
+                                                "???"
+                                        }
+                                    ))
+                                    for ((i, value) in players.withIndex()) {
+                                        resultGui[i] = if (identifiedPlayers.contains(value.uniqueId)) {
+                                            Item.simple(ItemStacks.Gui.identifiedPlayer(
+                                                value.name.component,
+                                                value.uniqueId
+                                            ))
+                                        } else {
+                                            if (Floodgate.api?.isFloodgatePlayer(player.uniqueId) == true) {
+                                                Item.simple(ItemStacks.Gui.unidentifiedPlayerBedrock)
+                                            } else {
+                                                Item.simple(ItemStacks.Gui.unidentifiedPlayer)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            onClose {
+                useSlot.items.first()?.let {
+                    player.give(it)
+                }
+            }
+        }.open()
+    }
 
     interface DetectiveNote {
         fun message(noteTime: Instant): Component
@@ -326,14 +392,25 @@ class Detective : Survivor {
         data class SeenNear(val location: Location, val names: List<String>) : DetectiveNote {
             override fun message(noteTime: Instant): Component {
                 return Component.text {
-                    it.append(Component.text("Surroundings at \n${location.blockX}, ${location.blockY}, ${location.blockZ}:\n\n"))
-                    for (name in names) {
-                        it.append(Component.text(name))
-                        it.append(Component.newline())
+                    it.append("Surroundings at \n${location.blockX}, ${location.blockY}, ${location.blockZ}:\n".colored(Colors.DARK_GRAY))
+                    for ((i, name) in names.withIndex()) {
+                        it.append(" ${i+1}. $name".component)
                     }
                 }
             }
         }
+
+        data class SeenNearCorpse(val corpseName: String, val names: List<String>) : DetectiveNote {
+            override fun message(noteTime: Instant): Component {
+                return Component.text {
+                    it.append("Contaminated corpse \nof $corpseName:\n".colored(Colors.DARK_GRAY))
+                    for ((i, name) in names.withIndex()) {
+                        it.append(" ${i+1}. $name\n".component)
+                    }
+                }
+            }
+        }
+
         data class Death(val name: String, val causeOfDeath: String, val deathTime: Instant) : DetectiveNote {
             override fun message(noteTime: Instant): Component {
                 return Component.text {
@@ -343,5 +420,27 @@ class Detective : Survivor {
                 }
             }
         }
+    }
+
+    sealed interface DNASample {
+        data class IdentifiableSample(val player: SessionPlayer) : DNASample
+        data class IdentifiableCorpseSample(val player: SessionPlayer) : DNASample
+        data class CorpseSample(val corpse: SessionPlayer, val potentials: List<SessionPlayer>) : DNASample
+    }
+
+    override val settings: Role.Settings
+        get() = SETTINGS
+
+    companion object {
+        @JvmField
+        val SETTINGS: Role.Settings = Role.Settings(
+            key = TraitorGamePlugin.key("detective"),
+            name = "Detective",
+            roleColor = Colors.DETECTIVE_BLUE,
+            alignment = RoleAlignment.SURVIVOR,
+            itemProvider = ItemBuilder(Material.CROSSBOW),
+            goalProvider = { "Track down and kill the traitors by any means." },
+            builder = { Detective() }
+        )
     }
 }

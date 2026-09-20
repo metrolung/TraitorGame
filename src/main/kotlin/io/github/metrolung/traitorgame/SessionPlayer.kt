@@ -2,6 +2,7 @@ package io.github.metrolung.traitorgame
 
 import io.github.metrolung.traitorgame.role.Role
 import org.bukkit.Location
+import org.bukkit.OfflinePlayer
 import org.bukkit.Server
 import org.bukkit.entity.Player
 import java.util.*
@@ -10,7 +11,8 @@ data class SessionPlayer(
     val uniqueId: UUID,
     val name: String,
     val role: Role,
-    val server: Server
+    val server: Server,
+    val statusBar: StatusBar
 ) {
     var lastChanceUsed: Boolean = false
     var returnLocation: Location? = null
@@ -18,6 +20,7 @@ data class SessionPlayer(
 
     val player: Player?
         get() = server.getPlayer(uniqueId)
+
 
     val onlineSessionPlayer: OnlineSessionPlayer?
         get() = player?.let { player -> OnlineSessionPlayer(player, this) }
@@ -54,6 +57,8 @@ data class OnlineSessionPlayer(val player: Player, val sessionPlayer: SessionPla
         get() = sessionPlayer.role
     val server: Server
         get() = sessionPlayer.server
+    val statusBar: StatusBar
+        get() = sessionPlayer.statusBar
 
     var lastChanceUsed: Boolean
         get() = sessionPlayer.lastChanceUsed
