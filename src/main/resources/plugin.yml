@@ -2,5 +2,5 @@ name: TraitorGame
 version: '${version}'
 
 main: io.github.metrolung.traitorgame.TraitorGamePlugin
-api-version: '26.1.2'
+api-version: '26.2'
 load: POSTWORLD
