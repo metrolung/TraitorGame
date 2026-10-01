@@ -19,9 +19,14 @@ class TraitorGamePlugin : JavaPlugin() {
     val sessionManager: SessionManager = SessionManager()
 
     val roleManager = RoleManager()
+    val mogul = roleManager.registerRole(Mogul.SETTINGS)
+    val detective = roleManager.registerRole(Detective.SETTINGS)
+    val astral = roleManager.registerRole(Astral.SETTINGS)
+    val jester = roleManager.registerRole(Jester.SETTINGS)
 
     override fun onEnable() {
         saveDefaultConfig()
+        afterConfigLoaded()
 
         this.lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
             event.registrar().register(TraitorGameCommand(this).create().build())
@@ -31,20 +36,22 @@ class TraitorGamePlugin : JavaPlugin() {
             event.registrar().register(InfoCommand.create().build())
             event.registrar().register(ShoutCommand.create().build())
         }
+    }
 
-        roleManager.registerRole(Mogul.SETTINGS).setFixed(
+    fun afterConfigLoaded() {
+        mogul.setFixed(
             config.getInt("role.mogul.count"),
             config.getDouble("role.mogul.chance")
         )
-        roleManager.registerRole(Detective.SETTINGS).setFixed(
+        detective.setFixed(
             config.getInt("role.detective.count"),
             config.getDouble("role.detective.chance")
         )
-        roleManager.registerRole(Astral.SETTINGS).setFixed(
+        astral.setFixed(
             config.getInt("role.astral.count"),
             config.getDouble("role.astral.chance")
         )
-        roleManager.registerRole(Jester.SETTINGS).setFixed(
+        jester.setFixed(
             config.getInt("role.jester.count"),
             config.getDouble("role.jester.chance")
         )

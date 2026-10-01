@@ -3,7 +3,6 @@ package io.github.metrolung.traitorgame.commands
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.arguments.DoubleArgumentType
 import com.mojang.brigadier.arguments.IntegerArgumentType
-import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
 import io.github.metrolung.traitorgame.SessionSettings
@@ -58,7 +57,7 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
                         null,
                     ) }
                     .then(Commands.argument("role", ArgumentTypes.namespacedKey())
-                        .suggests { context, builder ->
+                        .suggests { _, builder ->
                             for (key in plugin.roleManager.keys) {
                                 builder.suggest(key.toString())
                             }
@@ -155,6 +154,7 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
 
     private fun executeReloadConfigs(ctx: CommandContext<CommandSourceStack>): Int {
         plugin.reloadConfig()
+        plugin.afterConfigLoaded()
 
         return Command.SINGLE_SUCCESS
     }
