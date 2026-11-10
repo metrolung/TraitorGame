@@ -1,7 +1,7 @@
 plugins {
     kotlin("jvm") version "2.4.0"
     id("com.gradleup.shadow") version "9.4.2"
-    id("xyz.jpenilla.run-paper") version "3.0.2"
+    id("xyz.jpenilla.run-paper") version "3.1.0"
 }
 
 repositories {
@@ -12,6 +12,7 @@ repositories {
     maven("https://jitpack.io")
     maven("https://repo.codemc.io/repository/maven-releases/")
     maven("https://repo.codemc.io/repository/maven-snapshots/")
+    maven("https://repo.nekroplex.com/releases")
 }
 
 dependencies {
@@ -21,6 +22,7 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
     compileOnly("org.geysermc.floodgate:api:2.2.5-SNAPSHOT")
     compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
+    implementation("gg.aquatic:kommand-paper:26.1.0")
 }
 
 kotlin {

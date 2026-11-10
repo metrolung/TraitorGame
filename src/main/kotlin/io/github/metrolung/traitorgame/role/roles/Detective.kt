@@ -1,5 +1,6 @@
 package io.github.metrolung.traitorgame.role.roles
 
+
 import io.github.metrolung.traitorgame.Colors
 import io.github.metrolung.traitorgame.ItemStacks
 import io.github.metrolung.traitorgame.Meeting
@@ -52,7 +53,6 @@ import kotlin.time.toJavaInstant
 
 class Detective : Survivor {
     val notes = mutableListOf<Pair<Instant, DetectiveNote>>()
-//    val scannerInventory = VirtualInventory(3*3)
     val identifiedPlayers = mutableSetOf<UUID>()
     val resultGui = Gui.empty(5, 2)
 
