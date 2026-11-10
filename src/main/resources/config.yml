@@ -8,25 +8,33 @@ gameplay:
   entity-damage-factor: 0.35
   end-if-no-evil: true
 
-role:
-  astral:
-    count: 1
-    chance: 100.0
+random-traits:
+  sheriff: 0-2 100%
+  coroner: 1 100%
+  detective: 1 100%
 
-  mogul:
-    count: 1
-    chance: 100.0
-    money-goal: 1000.00
+roles:
 
-  detective:
-    count: 1
-    chance: 100.0
-    notebook-cooldown: 3
 
-  jester:
-    count: 1
-    chance: 50.0
-    punishment: 60.0
+#role:
+#  astral:
+#    count: 1
+#    chance: 100.0
+#
+#  mogul:
+#    count: 1
+#    chance: 100.0
+#    money-goal: 1000.00
+#
+#  detective:
+#    count: 1
+#    chance: 100.0
+#    notebook-cooldown: 3
+#
+#  jester:
+#    count: 1
+#    chance: 50.0
+#    punishment: 60.0
 
 
 chat:

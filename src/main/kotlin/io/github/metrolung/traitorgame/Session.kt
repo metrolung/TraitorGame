@@ -11,9 +11,9 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEn
 import io.github.metrolung.traitorgame.achievements.Achievement
 import io.github.metrolung.traitorgame.achievements.TheFinalStage
 import io.github.metrolung.traitorgame.api.Floodgate
-import io.github.metrolung.traitorgame.role.roles.Detective
 import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.role.RoleManager
+import io.github.metrolung.traitorgame.trait.Detective
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
 import io.papermc.paper.datacomponent.item.ResolvableProfile
 import io.papermc.paper.event.entity.EntityEquipmentChangedEvent

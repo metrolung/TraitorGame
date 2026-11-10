@@ -11,6 +11,7 @@ data class SessionPlayer(
     val uniqueId: UUID,
     val name: String,
     val role: Role,
+    val traits: MutableList<Role>,
     val server: Server,
     val statusBar: StatusBar
 ) {
@@ -20,7 +21,6 @@ data class SessionPlayer(
 
     val player: Player?
         get() = server.getPlayer(uniqueId)
-
 
     val onlineSessionPlayer: OnlineSessionPlayer?
         get() = player?.let { player -> OnlineSessionPlayer(player, this) }

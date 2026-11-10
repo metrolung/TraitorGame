@@ -16,28 +16,34 @@ import java.util.UUID
 
 
 object ItemStacks {
-    val OBSCURED_KEY = TraitorGamePlugin.key("obscured")
+    val CONCEALED_KEY = TraitorGamePlugin.key("obscured")
     val ROLE_EQUIPMENT_KEY = TraitorGamePlugin.key("equipment")
     val ROLE_MATERIAL_KEY = TraitorGamePlugin.key("material")
 
-    fun manifesto(codeword: String): ItemStack = ItemStack.of(Material.BOOK).apply {
-            this.setData(DataComponentTypes.ITEM_NAME, Component.text("Traitor's Manifesto").color(Colors.TRAITOR_RED.textColor))
-            this.setData(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true)
-            this.lore(
-                listOf(
-                    "DO NOT LET ANYONE SEE THIS"
-                        .colored(Colors.VERY_YELLOW)
-                        .decorate(TextDecoration.BOLD)
-                        .decoration(TextDecoration.ITALIC, false),
-                    "Code Word: $codeword"
-                        .colored(Colors.WHITE)
-                        .decoration(TextDecoration.ITALIC, false)
-                )
-            )
-            this.editPersistentDataContainer { pdc ->
-                pdc.set(ROLE_MATERIAL_KEY, PersistentDataType.STRING, "manifesto")
-            }
+    fun ItemStack.concealed(concealed: Boolean = true) {
+        this.editPersistentDataContainer { pdc ->
+            pdc.set(CONCEALED_KEY, PersistentDataType.BOOLEAN, concealed)
         }
+    }
+
+    fun manifesto(codeword: String): ItemStack = ItemStack.of(Material.BOOK).apply {
+        this.setData(DataComponentTypes.ITEM_NAME, Component.text("Traitor's Manifesto").color(Colors.TRAITOR_RED.textColor))
+        this.setData(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true)
+        this.lore(
+            listOf(
+                "DO NOT LET ANYONE SEE THIS"
+                    .colored(Colors.VERY_YELLOW)
+                    .decorate(TextDecoration.BOLD)
+                    .decoration(TextDecoration.ITALIC, false),
+                "Code Word: $codeword"
+                    .colored(Colors.WHITE)
+                    .decoration(TextDecoration.ITALIC, false)
+            )
+        )
+        this.editPersistentDataContainer { pdc ->
+            pdc.set(ROLE_MATERIAL_KEY, PersistentDataType.STRING, "manifesto")
+        }
+    }
 
     val notebook: ItemStack
         get() = ItemStack.of(Material.BOOK).apply {
@@ -56,8 +62,8 @@ object ItemStacks {
             this.lore(listOf("Click to open".colored(Colors.VERY_YELLOW)))
             this.editPersistentDataContainer { pdc ->
                 pdc.set(ROLE_EQUIPMENT_KEY, PersistentDataType.STRING, "merchandise_box")
-                pdc.set(OBSCURED_KEY, PersistentDataType.BOOLEAN, true)
             }
+            this.concealed(true)
         }
 
     val sampleChecker: ItemStack
@@ -67,8 +73,8 @@ object ItemStacks {
             this.lore(listOf("Click to open".colored(Colors.VERY_YELLOW)))
             this.editPersistentDataContainer { pdc ->
                 pdc.set(ROLE_EQUIPMENT_KEY, PersistentDataType.STRING, "sample_checker")
-                pdc.set(OBSCURED_KEY, PersistentDataType.BOOLEAN, true)
             }
+            this.concealed(true)
         }
 
     val swab: ItemStack
@@ -79,6 +85,7 @@ object ItemStacks {
             this.editPersistentDataContainer { pdc ->
                 pdc.set(ROLE_MATERIAL_KEY, PersistentDataType.STRING, "swab")
             }
+            this.concealed(true)
         }
 
     val SAMPLE_KEY = TraitorGamePlugin.key("used_swab")
@@ -92,7 +99,7 @@ object ItemStacks {
         }
     }
 
-    val detectiveCrossbow: ItemStack
+    val sheriffCrossbow: ItemStack
         get() = ItemStack.of(Material.CROSSBOW).apply {
             this.editMeta { meta ->
                 meta.addEnchant(Enchantment.QUICK_CHARGE, 2, true)

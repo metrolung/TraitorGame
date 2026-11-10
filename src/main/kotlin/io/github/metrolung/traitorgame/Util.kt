@@ -1,5 +1,6 @@
 package io.github.metrolung.traitorgame
 
+import io.papermc.paper.block.BlockPredicate.predicate
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.format.TextColor
@@ -93,6 +94,34 @@ fun Player.setNametagVisibility(shown: Boolean) {
         team.removePlayer(this)
     else
         team.addPlayer(this)
+}
+
+fun <T> Collection<T>.anyNoShortCircuit(predicate: (T) -> Boolean): Boolean {
+    var pass = false
+    for (item in this) {
+        if (predicate(item))
+            pass = true
+    }
+    return pass
+}
+
+fun <T> Collection<T>.allNoShortCircuit(predicate: (T) -> Boolean): Boolean {
+    var pass = true
+    for (item in this) {
+        if (!predicate(item))
+            pass = false
+    }
+    return pass
+}
+
+fun <T> Collection<T>.noneNoShortCircuit(predicate: (T) -> Boolean): Boolean {
+    var pass = true
+
+    for (item in this) {
+        if (predicate(item))
+            pass = false
+    }
+    return pass
 }
 
 operator fun Int.times(boolean: Boolean): Int = if (boolean) this else 0
