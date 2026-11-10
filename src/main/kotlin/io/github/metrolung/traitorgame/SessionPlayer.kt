@@ -1,21 +1,35 @@
 package io.github.metrolung.traitorgame
 
 import io.github.metrolung.traitorgame.role.Role
+import io.github.metrolung.traitorgame.trait.Trait
 import org.bukkit.Location
 import org.bukkit.OfflinePlayer
 import org.bukkit.Server
 import org.bukkit.entity.Player
 import java.util.*
+import kotlin.comparisons.reverseOrder
 
-data class SessionPlayer(
+class SessionPlayer(
     val uniqueId: UUID,
     val name: String,
     val role: Role,
-    val traits: MutableList<Role>,
     val server: Server,
-    val statusBar: StatusBar
+    val statusBar: StatusBar,
+    vararg defaultTraits: Trait
 ) {
-    var lastChanceUsed: Boolean = false
+    val traits: SortedMap<Double, MutableList<Trait>> = sortedMapOf(reverseOrder())
+    val data = TypedDataHolder()
+
+    init {
+        for (trait in defaultTraits) {
+            if (trait.settings.priority !in traits) {
+                traits[trait.settings.priority] = mutableListOf()
+            }
+
+            traits[trait.settings.priority]!!.add(trait)
+        }
+    }
+
     var returnLocation: Location? = null
     var canReturn: Boolean = false
 
@@ -57,12 +71,14 @@ data class OnlineSessionPlayer(val player: Player, val sessionPlayer: SessionPla
         get() = sessionPlayer.role
     val server: Server
         get() = sessionPlayer.server
+    val traits: SortedMap<Double, MutableList<Trait>>
+        get() = sessionPlayer.traits
     val statusBar: StatusBar
         get() = sessionPlayer.statusBar
 
-    var lastChanceUsed: Boolean
-        get() = sessionPlayer.lastChanceUsed
-        set(value) { sessionPlayer.lastChanceUsed = value }
+//    var lastChanceUsed: Boolean
+//        get() = sessionPlayer.lastChanceUsed
+//        set(value) { sessionPlayer.lastChanceUsed = value }
     var returnLocation: Location?
         get() = sessionPlayer.returnLocation
         set(value) { sessionPlayer.returnLocation = value }

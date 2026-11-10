@@ -40,5 +40,6 @@ object Colors {
     const val ORANGE = 0xFC9835
     const val LAVENDER = 0xB985FC
 
-
+    const val LAST_CHANCE = 0x88F0FC
+    
 }

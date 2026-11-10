@@ -14,6 +14,7 @@ import io.github.metrolung.traitorgame.api.Floodgate
 import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.role.RoleManager
 import io.github.metrolung.traitorgame.trait.Detective
+import io.github.metrolung.traitorgame.trait.Trait
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
 import io.papermc.paper.datacomponent.item.ResolvableProfile
 import io.papermc.paper.event.entity.EntityEquipmentChangedEvent
@@ -27,7 +28,6 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.TitlePart
-import org.bukkit.EntityEffect
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
@@ -65,7 +65,6 @@ import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
-import org.bukkit.scoreboard.Team
 import org.bukkit.util.BlockIterator
 import org.joml.Vector3f
 import java.time.Duration
@@ -96,6 +95,8 @@ class Session(
     private var active: Boolean = false
 
     var listenerCommon: PacketListenerCommon? = null
+
+    val data = TypedDataHolder()
 
     var roleShown = false
         private set
@@ -499,10 +500,10 @@ class Session(
                     mannequin.velocity = movement
                 }
 
-                if (player.role !is Detective && !contaminators.containsKey(player.uniqueId)) {
-                    contaminators[player.uniqueId] = player.sessionPlayer
-                    player.player.sendMessage(Component.text("You have contaminated the corpse.").color(Colors.VERY_RED.textColor))
-                }
+//                if (player.role !is Detective && !contaminators.containsKey(player.uniqueId)) {
+//                    contaminators[player.uniqueId] = player.sessionPlayer
+//                    player.player.sendMessage(Component.text("You have contaminated the corpse.").color(Colors.VERY_RED.textColor))
+//                }
             }
         }
     }
@@ -991,12 +992,12 @@ class Session(
         activeMeeting?.onServerTicked()
     }
 
-    @EventHandler
-    fun onEntityDeath(event: EntityDeathEvent) {
-        if (event.entity is EnderDragon) {
-            manager.endSession(EndGameReason.DragonDefeated)
-        }
-    }
+//    @EventHandler
+//    fun onEntityDeath(event: EntityDeathEvent) {
+//        if (event.entity is EnderDragon) {
+//            manager.endSession(EndGameReason.DragonDefeated)
+//        }
+//    }
 
     @EventHandler
     fun onItemDespawn(event: ItemDespawnEvent) {
@@ -1075,8 +1076,34 @@ class Session(
         }
     }
 
+    fun doTraitEvent(sessionPlayer: SessionPlayer, callback: (Trait, Trait.Event) -> Unit): Trait.Event {
+        val event = Trait.Event(
+            session = this,
+            player = sessionPlayer,
+            handled = false,
+            cancelMinecraft = false,
+            doAnimation = false,
+        )
+        for ((_, traits) in sessionPlayer.traits) {
+            for (trait in traits) {
+                if (isPlayerDead(sessionPlayer) && !trait.settings.activeWhileDead) {
+                    continue
+                }
+
+                callback(trait, event)
+            }
+        }
+        return event
+    }
+
+    fun doTraitEventOnAll(callback: (Trait, Trait.Event) -> Unit) {
+        for ((_, player) in allPlayers) {
+            doTraitEvent(player, callback)
+        }
+    }
+
     @EventHandler
-    fun endPortalOpened(event: PlayerChangedWorldEvent) {
+    fun endPortalEntered(event: PlayerChangedWorldEvent) {
         if (event.player.world.key == NamespacedKey.minecraft("the_end")) {
             achieve(TheFinalStage)
         }
@@ -1095,7 +1122,7 @@ class Session(
             for ((i, equipment) in wrapper.equipment.withIndex()) {
                 if (equipment == null) continue
                 val item = SpigotConversionUtil.toBukkitItemStack(equipment.item)
-                if (item.persistentDataContainer.get(ItemStacks.OBSCURED_KEY, PersistentDataType.BOOLEAN) == true) {
+                if (item.persistentDataContainer.get(ItemStacks.CONCEALED_KEY, PersistentDataType.BOOLEAN) == true) {
                     changeTracked = true
                     wrapper.equipment[i] = Equipment(equipment.slot, com.github.retrooper.packetevents.protocol.item.ItemStack.EMPTY)
                 }
@@ -1108,101 +1135,119 @@ class Session(
     }
 
     @EventHandler
-    fun onPlayerDeath(event: PlayerDeathEvent) {
-        event.showDeathMessages = false
+    fun onEntityDamage(event: EntityDamageEvent) {
+        val attackingEntity = event.damageSource.causingEntity
+        val attackingPlayer = allPlayers[attackingEntity?.uniqueId]
 
-        val player = event.player
+        val victimEntity = event.entity
+        val victimPlayer = allPlayers[victimEntity.uniqueId]
 
-        val sessionPlayer = alivePlayers[player.uniqueId]?.onlineSessionPlayer ?: run {
-            return
+        val damageInfo = Trait.DamageInfo(
+            isKilling = false,
+            victimPlayer = victimPlayer?.onlineSessionPlayer!!,
+            victimEntity = victimEntity,
+            attackingPlayer = attackingPlayer?.onlineSessionPlayer!!,
+            attackingEntity = attackingEntity
+        )
+
+        doTraitEvent(victimPlayer) { trait, event ->
+            trait.
         }
-
-        var contaminators = mutableMapOf<UUID, SessionPlayer>()
-
-        val killer = event.player.lastDamageCause?.damageSource?.directEntity
-        if (killer != null) {
-            val killerSessionPlayer = alivePlayers[killer.uniqueId]?.onlineSessionPlayer
-            if (killerSessionPlayer != null) {
-                contaminators = mutableMapOf(killerSessionPlayer.uniqueId to killerSessionPlayer.sessionPlayer)
-                if (killerSessionPlayer.role.onKilling(this, killerSessionPlayer, sessionPlayer)) {
-                    event.isCancelled = true
-                    return
-                }
-                if (sessionPlayer.role.onKilled(this, sessionPlayer, killerSessionPlayer)) {
-                    event.isCancelled = true
-                    return
-                }
-            }
-        }
-
-        if (!sessionPlayer.lastChanceUsed && qualifiesForLastChance(event)) {
-            player.sendTitlePart(
-                TitlePart.TIMES,
-                Title.Times.times(
-                    Duration.ofMillis(100),
-                    Duration.ofMillis(1500),
-                    Duration.ofSeconds(1)
-                )
-            )
-
-            player.sendTitlePart(
-                TitlePart.TITLE,
-                MiniMessage.deserialize("<gradient:#88f0fc:#ccffff><b>Last chance!</b></gradient>")
-            )
-
-            player.playEffect(EntityEffect.PROTECTED_FROM_DEATH)
-
-            event.isCancelled = true
-
-            player.health = 5.0
-            player.addPotionEffect(PotionEffect(PotionEffectType.RESISTANCE, 200, 2, true, true))
-            player.addPotionEffect(PotionEffect(PotionEffectType.WEAKNESS, 200, 2, true, true))
-            player.addPotionEffect(PotionEffect(PotionEffectType.GLOWING, 200, 0, true, true))
-            player.addPotionEffect(PotionEffect(PotionEffectType.SPEED, 100, 0, true, true))
-
-            sessionPlayer.lastChanceUsed = true
-
-            return
-        }
-
-        val causeOfDeath = when (event.player.lastDamageCause?.cause) {
-            EntityDamageEvent.DamageCause.KILL -> "Divine Retribution"
-            EntityDamageEvent.DamageCause.WORLD_BORDER -> "Divine Retribution"
-            EntityDamageEvent.DamageCause.CONTACT -> "Exsanguination, Environmental"
-            EntityDamageEvent.DamageCause.ENTITY_ATTACK -> "Exsanguination, Direct"
-            EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK -> "Exsanguination, Direct"
-            EntityDamageEvent.DamageCause.PROJECTILE -> "Exsanguination, Indirect"
-            EntityDamageEvent.DamageCause.SUFFOCATION -> "Asphyxia"
-            EntityDamageEvent.DamageCause.FALL -> "Blunt Force"
-            EntityDamageEvent.DamageCause.FIRE -> "Severe Burns"
-            EntityDamageEvent.DamageCause.FIRE_TICK -> "Severe Burns"
-            EntityDamageEvent.DamageCause.MELTING -> "Hyperthermia"
-            EntityDamageEvent.DamageCause.LAVA -> "Severe Burns"
-            EntityDamageEvent.DamageCause.DROWNING -> "Asphyxia"
-            EntityDamageEvent.DamageCause.BLOCK_EXPLOSION -> "Blast Injury"
-            EntityDamageEvent.DamageCause.ENTITY_EXPLOSION -> "Blast Injury"
-            EntityDamageEvent.DamageCause.VOID -> "Asphyxia"
-            EntityDamageEvent.DamageCause.LIGHTNING -> "Electric Shock"
-            EntityDamageEvent.DamageCause.SUICIDE -> "Suicide"
-            EntityDamageEvent.DamageCause.STARVATION -> "Starvation"
-            EntityDamageEvent.DamageCause.POISON -> "Intoxication"
-            EntityDamageEvent.DamageCause.MAGIC -> "Intoxication"
-            EntityDamageEvent.DamageCause.WITHER -> "Intoxication"
-            EntityDamageEvent.DamageCause.FALLING_BLOCK -> "Asphyxia"
-            EntityDamageEvent.DamageCause.THORNS -> "Exsanguination, Direct"
-            EntityDamageEvent.DamageCause.DRAGON_BREATH -> "Intoxication"
-            EntityDamageEvent.DamageCause.FLY_INTO_WALL -> "Blunt Force"
-            EntityDamageEvent.DamageCause.HOT_FLOOR -> "Severe Burns"
-            EntityDamageEvent.DamageCause.CAMPFIRE -> "Severe Burns"
-            EntityDamageEvent.DamageCause.CRAMMING -> "Asphyxia"
-            EntityDamageEvent.DamageCause.DRYOUT -> "Hyperthermia"
-            EntityDamageEvent.DamageCause.FREEZE -> "Hypothermia"
-            EntityDamageEvent.DamageCause.SONIC_BOOM -> "Blast Injury"
-            else -> "Unknown"
-        }
-
-        onPlayerKilled(player.uniqueId, event.drops, causeOfDeath, contaminators)
     }
+
+    @EventHandler
+    fun onEntityDeath(event: EntityDeathEvent) {
+        val attackingEntity = event.damageSource.causingEntity
+        val attackingPlayer = allPlayers[attackingEntity?.uniqueId]
+
+        val victimEntity = event.entity
+        val victimPlayer = allPlayers[victimEntity.uniqueId]
+
+        val damageInfo = Trait.DamageInfo(
+            isKilling = true,
+            victimPlayer = victimPlayer?.onlineSessionPlayer!!,
+            victimEntity = victimEntity,
+            attackingPlayer = attackingPlayer?.onlineSessionPlayer!!,
+            attackingEntity = attackingEntity
+        )
+
+
+    }
+
+//    @EventHandler
+//    fun onPlayerDeath(event: PlayerDeathEvent) {
+//        event.showDeathMessages = false
+//
+//        val player = event.player
+//
+//        val sessionPlayer = alivePlayers[player.uniqueId]?.onlineSessionPlayer ?: run { return }
+//
+////        var contaminators = mutableMapOf<UUID, SessionPlayer>()
+//
+//        val damageInfo = Trait.DamageInfo(
+//
+//        )
+//
+//        val killer = event.player.lastDamageCause?.damageSource?.directEntity
+//        if (killer != null) {
+////            val killerSessionPlayer = alivePlayers[killer.uniqueId]?.onlineSessionPlayer
+////            if (killerSessionPlayer != null) {
+////                contaminators = mutableMapOf(killerSessionPlayer.uniqueId to killerSessionPlayer.sessionPlayer)
+////                if (killerSessionPlayer.role.onKilling(this, killerSessionPlayer, sessionPlayer)) {
+////                    event.isCancelled = true
+////                    return
+////                }
+////                if (sessionPlayer.role.onKilled(this, sessionPlayer, killerSessionPlayer)) {
+////                    event.isCancelled = true
+////                    return
+////                }
+////            }
+//        }
+//
+////        if (!sessionPlayer.lastChanceUsed && qualifiesForLastChance(event)) {
+////
+////
+////            return
+////        }
+//
+//        val causeOfDeath = when (event.player.lastDamageCause?.cause) {
+//            EntityDamageEvent.DamageCause.KILL -> "Divine Retribution"
+//            EntityDamageEvent.DamageCause.WORLD_BORDER -> "Divine Retribution"
+//            EntityDamageEvent.DamageCause.CONTACT -> "Exsanguination, Environmental"
+//            EntityDamageEvent.DamageCause.ENTITY_ATTACK -> "Exsanguination, Direct"
+//            EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK -> "Exsanguination, Direct"
+//            EntityDamageEvent.DamageCause.PROJECTILE -> "Exsanguination, Indirect"
+//            EntityDamageEvent.DamageCause.SUFFOCATION -> "Asphyxia"
+//            EntityDamageEvent.DamageCause.FALL -> "Blunt Force"
+//            EntityDamageEvent.DamageCause.FIRE -> "Severe Burns"
+//            EntityDamageEvent.DamageCause.FIRE_TICK -> "Severe Burns"
+//            EntityDamageEvent.DamageCause.MELTING -> "Hyperthermia"
+//            EntityDamageEvent.DamageCause.LAVA -> "Severe Burns"
+//            EntityDamageEvent.DamageCause.DROWNING -> "Asphyxia"
+//            EntityDamageEvent.DamageCause.BLOCK_EXPLOSION -> "Blast Injury"
+//            EntityDamageEvent.DamageCause.ENTITY_EXPLOSION -> "Blast Injury"
+//            EntityDamageEvent.DamageCause.VOID -> "Asphyxia"
+//            EntityDamageEvent.DamageCause.LIGHTNING -> "Electric Shock"
+//            EntityDamageEvent.DamageCause.SUICIDE -> "Suicide"
+//            EntityDamageEvent.DamageCause.STARVATION -> "Starvation"
+//            EntityDamageEvent.DamageCause.POISON -> "Intoxication"
+//            EntityDamageEvent.DamageCause.MAGIC -> "Intoxication"
+//            EntityDamageEvent.DamageCause.WITHER -> "Intoxication"
+//            EntityDamageEvent.DamageCause.FALLING_BLOCK -> "Asphyxia"
+//            EntityDamageEvent.DamageCause.THORNS -> "Exsanguination, Direct"
+//            EntityDamageEvent.DamageCause.DRAGON_BREATH -> "Intoxication"
+//            EntityDamageEvent.DamageCause.FLY_INTO_WALL -> "Blunt Force"
+//            EntityDamageEvent.DamageCause.HOT_FLOOR -> "Severe Burns"
+//            EntityDamageEvent.DamageCause.CAMPFIRE -> "Severe Burns"
+//            EntityDamageEvent.DamageCause.CRAMMING -> "Asphyxia"
+//            EntityDamageEvent.DamageCause.DRYOUT -> "Hyperthermia"
+//            EntityDamageEvent.DamageCause.FREEZE -> "Hypothermia"
+//            EntityDamageEvent.DamageCause.SONIC_BOOM -> "Blast Injury"
+//            else -> "Unknown"
+//        }
+//
+//        onPlayerKilled(player.uniqueId, event.drops, causeOfDeath, contaminators)
+//    }
 
     @EventHandler
     fun equipmentChanged(event: EntityEquipmentChangedEvent) {
