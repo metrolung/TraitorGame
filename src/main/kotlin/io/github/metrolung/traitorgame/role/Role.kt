@@ -24,6 +24,7 @@ interface Role {
 
     fun createRoleTraits(): List<Trait> = listOf()
 
+    fun isWinner(session: Session, sessionPlayer: SessionPlayer, anyTraitorsAlive: Boolean): Boolean
 
 //    fun isWinner(session: Session, sessionPlayer: SessionPlayer, endGameReason: EndGameReason): Boolean = false
 //

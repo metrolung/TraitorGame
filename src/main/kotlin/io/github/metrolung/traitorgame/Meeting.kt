@@ -290,10 +290,10 @@ class Meeting(
                 onMeetingEnd = a@{
                     val sessionPlayer = highestVote.player
 
-                    val player = sessionPlayer.player
+                    val player = sessionPlayer.actualPlayer
                     if (player == null) {
                         server.sendMessage(Component.text("${sessionPlayer.name} has been voted. "))
-                        session.onPlayerKilled(sessionPlayer, mutableListOf(), "Voted", mutableMapOf())
+                        session.handlePlayerDeath(sessionPlayer, mutableListOf(), "Voted", mutableMapOf())
                     } else {
                         server.sendMessage(
                             Component.text("${sessionPlayer.name} has been voted. ")

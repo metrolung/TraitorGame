@@ -96,6 +96,18 @@ fun Player.setNametagVisibility(shown: Boolean) {
         team.addPlayer(this)
 }
 
+inline fun Boolean.then(other: () -> Unit) {
+    if (this) {
+        other()
+    }
+}
+
+inline fun Boolean?.then(other: () -> Unit) {
+    if (this == true) {
+        other()
+    }
+}
+
 fun <T> Collection<T>.anyNoShortCircuit(predicate: (T) -> Boolean): Boolean {
     var pass = false
     for (item in this) {

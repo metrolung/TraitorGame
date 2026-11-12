@@ -3,9 +3,8 @@ package io.github.metrolung.traitorgame
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
 import org.bukkit.NamespacedKey
-import xyz.xenondevs.invui.inventory.VirtualInventory
 
-class StatusBar(val divider: Component) {
+class PlayerCommunicationManager(val divider: Component) {
     private var ticker = 0
     private val temporaryMessages: MutableList<Triple<Int, TextComponent, Boolean>> = mutableListOf()
     private val messages: MutableMap<NamespacedKey, Pair<TextComponent, Boolean>> = mutableMapOf()

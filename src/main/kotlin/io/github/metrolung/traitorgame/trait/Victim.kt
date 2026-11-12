@@ -23,7 +23,6 @@ object Victim : Trait {
     val SETTINGS = Trait.Settings(
         key = TraitorGamePlugin.key("victim"),
         name = "Victim",
-        activeWhileDead = false,
         traitColor = Colors.LAST_CHANCE,
         itemProvider = ItemBuilder(Material.CHICKEN),
         builder = { LastChance() }

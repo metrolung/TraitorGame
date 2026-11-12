@@ -3,41 +3,40 @@ package io.github.metrolung.traitorgame
 import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.trait.Trait
 import org.bukkit.Location
-import org.bukkit.OfflinePlayer
 import org.bukkit.Server
+import org.bukkit.entity.Entity
 import org.bukkit.entity.Player
 import java.util.*
-import kotlin.comparisons.reverseOrder
 
 class SessionPlayer(
     val uniqueId: UUID,
     val name: String,
     val role: Role,
     val server: Server,
-    val statusBar: StatusBar,
+    val playerCommunicationManager: PlayerCommunicationManager,
     vararg defaultTraits: Trait
 ) {
-    val traits: SortedMap<Double, MutableList<Trait>> = sortedMapOf(reverseOrder())
+    val traits = sortedSetOf<Trait>(Comparator { a, b ->
+        b.settings.priority.compareTo(a.settings.priority)
+    })
     val data = TypedDataHolder()
 
     init {
         for (trait in defaultTraits) {
-            if (trait.settings.priority !in traits) {
-                traits[trait.settings.priority] = mutableListOf()
-            }
-
-            traits[trait.settings.priority]!!.add(trait)
+            traits.add(trait)
         }
     }
 
     var returnLocation: Location? = null
     var canReturn: Boolean = false
+    var isAlive: Boolean = true
+    var activeEntity: Entity? = null
 
-    val player: Player?
+    val actualPlayer: Player?
         get() = server.getPlayer(uniqueId)
 
     val onlineSessionPlayer: OnlineSessionPlayer?
-        get() = player?.let { player -> OnlineSessionPlayer(player, this) }
+        get() = actualPlayer?.let { player -> OnlineSessionPlayer(player, this) }
 
     val queuedActionsWhenOnline: MutableList<(OnlineSessionPlayer) -> Unit> = mutableListOf()
 
@@ -71,10 +70,10 @@ data class OnlineSessionPlayer(val player: Player, val sessionPlayer: SessionPla
         get() = sessionPlayer.role
     val server: Server
         get() = sessionPlayer.server
-    val traits: SortedMap<Double, MutableList<Trait>>
+    val traits: SortedSet<Trait>
         get() = sessionPlayer.traits
-    val statusBar: StatusBar
-        get() = sessionPlayer.statusBar
+    val playerCommunicationManager: PlayerCommunicationManager
+        get() = sessionPlayer.playerCommunicationManager
 
 //    var lastChanceUsed: Boolean
 //        get() = sessionPlayer.lastChanceUsed
@@ -86,6 +85,15 @@ data class OnlineSessionPlayer(val player: Player, val sessionPlayer: SessionPla
     var canReturn: Boolean
         get() = sessionPlayer.canReturn
         set(value) { sessionPlayer.canReturn = value }
+
+    var isDead: Boolean
+        get() = sessionPlayer.isAlive
+        set(value) { sessionPlayer.isAlive = value }
+
+    var activeEntity: Entity?
+        get() = sessionPlayer.activeEntity
+        set(value) { sessionPlayer.activeEntity = value }
+
 
     fun doOnlineActions() {
         println("do online actions")

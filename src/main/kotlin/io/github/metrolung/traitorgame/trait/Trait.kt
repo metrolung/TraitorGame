@@ -1,24 +1,54 @@
 package io.github.metrolung.traitorgame.trait
 
-import io.github.metrolung.traitorgame.EndGameReason
-import io.github.metrolung.traitorgame.Meeting
 import io.github.metrolung.traitorgame.OnlineSessionPlayer
 import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.SessionPlayer
-import io.github.metrolung.traitorgame.Vote
 import io.github.metrolung.traitorgame.colored
 import net.kyori.adventure.text.TextComponent
-import org.bukkit.Location
 import org.bukkit.NamespacedKey
 import org.bukkit.entity.Entity
-import org.bukkit.entity.Item
-import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.invui.item.ItemProvider
 
 interface Trait {
-    fun isWinner(event: Event, endGameReason: EndGameReason) = Unit
-    fun isLoser(event: Event, endGameReason: EndGameReason) = Unit
+
+    fun getWinCondition(session: Session, sessionPlayer: SessionPlayer) = WinCondition.Default
+
+    enum class WinCondition {
+        Passive,
+        Default,
+        Unable;
+
+        val isPassiveOrDefault: Boolean
+            get() = this == Passive || this == Default
+
+        val isUnableOrDefault: Boolean
+            get() = this == Unable || this == Default
+
+        val isPassive: Boolean
+            get() = this == Passive
+
+        val isDefault: Boolean
+            get() = this == Default
+
+        val isUnable: Boolean
+            get() = this == Unable
+    }
+
+//    fun getCurrentWinCondition(event: Event) = CurrentWinCondition.Default
 //
+//    enum class CurrentWinCondition {
+//        Passively,
+//        Selfish,
+//        Default,
+//        Unable
+//    }
+
+//    fun isWinner(event: Event, endGameReason: EndGameReason) = Unit
+
+//    fun willWin(session: Session, sessionPlayer: SessionPlayer, endGameReason: EndGameReason) = false
+//    fun canWin(session: Session, sessionPlayer: SessionPlayer) = true
+//    fun willNotWin(session: Session, sessionPlayer: SessionPlayer): Boolean = false
+    //
 //    fun itemPickup(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, entity: Item) = Unit
 //    fun itemDropped(session: Session, sessionPlayer: OnlineSessionPlayer, itemStack: ItemStack, entity: Item) = Unit
 //
@@ -32,9 +62,11 @@ interface Trait {
 //    fun onMeetingStart(session: Session, meeting: Meeting, sessionPlayer: SessionPlayer) = Unit
 //    fun onMeetingEnd(session: Session, meeting: Meeting, sessionPlayer: SessionPlayer, turnout: Map<Vote, Int>) = Unit
 //
-//    fun onRolePresented(session: Session, sessionPlayer: OnlineSessionPlayer) = Unit
+    fun onRolePresented(event: Event) = Unit
 //
 //    fun onAnyPlayerTakeDamage(event: Event, damageInfo: DamageInfo) = Unit
+
+    fun onAnyDamageDealt(event: Event, damage: DamageInfo) = Unit
 
     fun onTakeDamage(event: Event, damage: DamageInfo) = Unit
     fun onDealDamage(event: Event, damage: DamageInfo) = Unit
@@ -44,17 +76,28 @@ interface Trait {
 //    fun onKillingPlayer(session: Session, sessionPlayer: OnlineSessionPlayer, victim: OnlineSessionPlayer): Boolean = false
 //    fun onAttackedByPlayer(session: Session, sessionPlayer: OnlineSessionPlayer, attacker: OnlineSessionPlayer): Boolean = false
 
-    fun onTickOnline(session: Session, sessionPlayer: OnlineSessionPlayer, tick: Int) {}
+    fun onTick(event: Event, tick: Int) {}
 
     val settings: Settings
 
-    data class Event(
+    class Event(
         val session: Session,
         val player: SessionPlayer,
-        var handled: Boolean = false,
-        var cancelMinecraft: Boolean = false,
+        var isHandled: Boolean = false,
+        var isCancelled: Boolean = false,
         var doAnimation: Boolean = false,
-    )
+    ) {
+        fun handleAndCancel(doAnimation: Boolean = false) {
+            this.isHandled = true
+            this.isCancelled = true
+            this.doAnimation = doAnimation
+        }
+
+        fun handle(doAnimation: Boolean = false) {
+            this.isHandled = true
+            this.doAnimation = doAnimation
+        }
+    }
 
     data class DamageInfo(
         val victimPlayer: OnlineSessionPlayer?,
@@ -72,7 +115,8 @@ interface Trait {
         val key: NamespacedKey,
         val priority: Double = 0.0,
         val name: String,
-        val activeWhileDead: Boolean,
+        val activeWhileDead: Boolean = false,
+        val canWinWhileDead: Boolean = false,
         val traitColor: Int,
         val stylized: TextComponent = name.colored(traitColor),
         val itemProvider: ItemProvider,

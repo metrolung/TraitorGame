@@ -19,7 +19,7 @@ class Pacifist : Trait {
         }
     }
 
-    override fun onTickOnline(session: Session, sessionPlayer: OnlineSessionPlayer, tick: Int) {
+    override fun onTick(event: Trait.Event, tick: Int) {
         if (punishmentTime > 0) {
             punishmentTime--
         }
@@ -36,7 +36,6 @@ class Pacifist : Trait {
         val SETTINGS = Trait.Settings(
             key = TraitorGamePlugin.key("pacifist"),
             name = "Pacifist",
-            activeWhileDead = false,
             traitColor = Colors.LAST_CHANCE,
             itemProvider = ItemBuilder(Material.EMERALD),
             builder = { LastChance() }
