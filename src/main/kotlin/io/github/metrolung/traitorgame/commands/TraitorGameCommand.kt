@@ -154,7 +154,6 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
 
     private fun executeReloadConfigs(ctx: CommandContext<CommandSourceStack>): Int {
         plugin.reloadConfig()
-        plugin.afterConfigLoaded()
 
         return Command.SINGLE_SUCCESS
     }

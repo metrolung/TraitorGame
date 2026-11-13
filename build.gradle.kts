@@ -22,7 +22,6 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
     compileOnly("org.geysermc.floodgate:api:2.2.5-SNAPSHOT")
     compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
-    implementation("gg.aquatic:kommand-paper:26.1.0")
     implementation("com.uchuhimo:kotlinx-bimap:1.2")
 }
 

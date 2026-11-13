@@ -2,7 +2,6 @@ package io.github.metrolung.traitorgame
 
 import com.github.retrooper.packetevents.PacketEvents
 import com.github.retrooper.packetevents.event.PacketListenerPriority
-import io.github.metrolung.traitorgame.role.RoleManager
 import org.bukkit.Server
 import org.bukkit.event.HandlerList
 import org.bukkit.plugin.Plugin
@@ -15,9 +14,9 @@ class SessionManager {
     val isSessionActive: Boolean
         get() = session != null
 
-    fun startSession(server: Server, plugin: Plugin, roleManager: RoleManager, configs: SessionSettings) {
+    fun startSession(server: Server, plugin: Plugin, configs: SessionSettings) {
         if (this.session == null) {
-            val session = Session(server, plugin, this, roleManager, configs)
+            val session = Session(server, plugin, this, configs)
             this.session = session
             session.start()
 

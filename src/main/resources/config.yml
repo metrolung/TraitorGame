@@ -8,22 +8,6 @@ gameplay:
   entity-damage-factor: 0.35
   end-if-no-evil: true
 
-traits:
-  sheriff:
-    amount: 0..2
-    chance: 100%
-  coroner:
-    amount: 1
-    chance: 100%
-  detective:
-    amount: 1
-    chance: 100%
-
-roles:
-  jester:
-    amount: 0
-    chance: 0%
-
 #role:
 #  astral:
 #    count: 1

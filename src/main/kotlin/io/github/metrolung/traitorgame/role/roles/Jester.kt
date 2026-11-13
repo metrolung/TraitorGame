@@ -15,10 +15,8 @@ class Jester : Neutral {
     var punishmentRemaining: Int = 0
     var hasBeenPunished: Boolean = false
 
-    override fun createRoleTraits(): List<Trait> = listOf(
-        Pacifist(),
-        Victim
-    )
+    override val roleTraits: List<Trait.Settings>
+        get() = super.roleTraits + listOf(Pacifist.SETTINGS, Victim.SETTINGS)
 
 //    override fun isWinner(session: Session, sessionPlayer: SessionPlayer, endGameReason: EndGameReason): Boolean {
 //        if (endGameReason is EndGameReason.JesterWin && endGameReason.sessionPlayer.uniqueId == sessionPlayer.uniqueId) {

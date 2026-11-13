@@ -20,7 +20,9 @@ data class SessionSettings(
     val chatFalloff: Double,
     val blockDampening: Double,
 
-    val roleSettings: RoleSettings
+    val traitorCount: Int,
+    val passiveNeutralCount: Int,
+    val evilNeutralCount: Int,
 ) {
     companion object {
         fun create(
@@ -43,7 +45,9 @@ data class SessionSettings(
                 chatRange = config.getDouble("chat.range"),
                 chatFalloff = config.getDouble("chat.falloff"),
                 blockDampening = config.getDouble("chat.block-dampening"),
-                roleSettings = RoleSettings.create(plugin, traitorCount, passiveNeutralCount, evilNeutralCount)
+                traitorCount = traitorCount,
+                passiveNeutralCount = passiveNeutralCount,
+                evilNeutralCount = evilNeutralCount,
             )
         }
     }

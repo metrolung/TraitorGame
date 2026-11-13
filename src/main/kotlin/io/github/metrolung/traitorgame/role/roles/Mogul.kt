@@ -12,6 +12,7 @@ import io.github.metrolung.traitorgame.component
 import io.github.metrolung.traitorgame.role.Neutral
 import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.role.RoleAlignment
+import io.github.metrolung.traitorgame.trait.Trait
 import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.datacomponent.item.PotionContents
 import io.papermc.paper.datacomponent.item.TooltipDisplay
@@ -40,8 +41,9 @@ import kotlin.math.min
 import kotlin.random.Random
 
 class Mogul : Neutral {
-    override val settings: Role.Settings
-        get() = SETTINGS
+
+    override val roleTraits: List<Trait.Settings>
+        get() = super.roleTraits + listOf()
 
 //    override fun isWinner(session: Session, sessionPlayer: SessionPlayer, endGameReason: EndGameReason): Boolean {
 //        if (totalCash > session.settings.roleSettings.mogulMoneyGoal) {
@@ -242,6 +244,9 @@ class Mogul : Neutral {
 //        }.open()
 //    }
 
+    override val settings: Role.Settings
+        get() = SETTINGS
+
     companion object {
 //        data class MerchandiseType(
 //            val name: Component,
@@ -363,7 +368,7 @@ class Mogul : Neutral {
             roleColor = Colors.NEUTRAL_YELLOW,
             alignment = RoleAlignment.PASSIVE_NEUTRAL,
             itemProvider = ItemBuilder(Material.CROSSBOW),
-            goalProvider = { roleSettings -> "You have no allegiances. Collect $${roleSettings.mogulMoneyGoal / 100.0} to win." },
+            goalProvider = { roleSettings -> "You have no allegiances. Collect $${"placeholder"} to win." },
             builder = { Mogul() }
         )
     }

@@ -11,14 +11,16 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEn
 import com.uchuhimo.collections.BiMap
 import com.uchuhimo.collections.MutableBiMap
 import com.uchuhimo.collections.mutableBiMapOf
+import io.github.metrolung.traitorgame.ItemStacks.concealed
+import io.github.metrolung.traitorgame.ItemStacks.bound
 import io.github.metrolung.traitorgame.achievements.Achievement
 import io.github.metrolung.traitorgame.achievements.TheFinalStage
 import io.github.metrolung.traitorgame.api.Floodgate
 import io.github.metrolung.traitorgame.role.Role
-import io.github.metrolung.traitorgame.role.RoleManager
+import io.github.metrolung.traitorgame.role.roles.Survivor
+import io.github.metrolung.traitorgame.role.roles.Traitor
 import io.github.metrolung.traitorgame.trait.Trait
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
-import io.papermc.paper.command.brigadier.argument.ArgumentTypes.player
 import io.papermc.paper.datacomponent.item.ResolvableProfile
 import io.papermc.paper.event.entity.EntityEquipmentChangedEvent
 import io.papermc.paper.event.player.AsyncChatEvent
@@ -38,7 +40,6 @@ import org.bukkit.NamespacedKey
 import org.bukkit.Server
 import org.bukkit.entity.BlockDisplay
 import org.bukkit.entity.Display
-import org.bukkit.entity.Entity
 import org.bukkit.entity.EntityType
 import org.bukkit.entity.Interaction
 import org.bukkit.entity.Item
@@ -50,7 +51,6 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDeathEvent
-import org.bukkit.event.entity.ItemDespawnEvent
 import org.bukkit.event.entity.ItemMergeEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerAdvancementDoneEvent
@@ -83,7 +83,6 @@ class Session(
     val server: Server,
     val plugin: Plugin,
     val manager: SessionManager,
-    val roleManager: RoleManager,
     val settings: SessionSettings,
 ) : Listener, PacketListener {
     private var meetingCooldown = settings.meetingCooldownTicks / 2
@@ -111,11 +110,23 @@ class Session(
 //        field: MutableBiMap<UUID, SessionCorpse>
 
     init {
+        val traitorPool = RandomPoolBuilder(
+            settings.traitorCount,
+            default = { Traitor() }
+        )
+        
+//        val pool = RandomPoolBuilder(
+//            server.onlinePlayers.size,
+//            default = { Survivor() },
+//        )
+//        
+//        pool.addSample(settings.traitorCount)
+
         val roles = roleManager.generatePool(
             server.onlinePlayers.size,
-            settings.roleSettings.traitorCount,
-            settings.roleSettings.passiveNeutralCount,
-            settings.roleSettings.evilNeutralCount
+            settings.traitorCount,
+            settings.passiveNeutralCount,
+            settings.evilNeutralCount
         )
 
         val players: MutableBiMap<UUID, SessionPlayer> = mutableBiMapOf()
@@ -172,8 +183,8 @@ class Session(
             return "You are not alive"
         }
 
-        sessionPlayer.actualPlayer?.teleport(locationPreMeeting)
-        sessionPlayer.actualPlayer?.playSound(Sound.sound {
+        sessionPlayer.player?.teleport(locationPreMeeting)
+        sessionPlayer.player?.playSound(Sound.sound {
             it.source(Sound.Source.PLAYER)
             it.type(NamespacedKey.minecraft("entity.player.teleport"))
         })
@@ -185,7 +196,7 @@ class Session(
     fun gracePeriod() {
         for (player in allPlayers.values) {
             if (player.isAlive)
-                player.actualPlayer?.addPotionEffect(PotionEffect(PotionEffectType.RESISTANCE, 20*30, 255, false, false, true))
+                player.player?.addPotionEffect(PotionEffect(PotionEffectType.RESISTANCE, 20*30, 255, false, false, true))
         }
     }
 
@@ -405,7 +416,7 @@ class Session(
         val reason = reason
 
         for (player in this.allPlayers.values) {
-            val player = player.actualPlayer ?: continue
+            val player = player.player ?: continue
             if (player.gameMode == GameMode.SPECTATOR)
                 player.gameMode = GameMode.SURVIVAL
         }
@@ -454,7 +465,7 @@ class Session(
 
     fun startMeeting() {
         for (sessionPlayer in allPlayers.values) {
-            sessionPlayer.actualPlayer?.let { player ->
+            sessionPlayer.player?.let { player ->
                 if (playerNearBell(player)) {
                     sessionPlayer.returnLocation = null
                 } else {
@@ -540,9 +551,9 @@ class Session(
 
         for (contaminator in contaminators.values) {
             if (contaminator.role.settings.alignment.isEvil) {
-                contaminator.actualPlayer?.sendMessage(Component.text("Hide the body by crouching.").color(Colors.VERY_RED.textColor))
+                contaminator.player?.sendMessage(Component.text("Hide the body by crouching.").color(Colors.VERY_RED.textColor))
             } else {
-                contaminator.actualPlayer?.sendMessage(Component.text("You have contaminated the corpse.").color(Colors.VERY_RED.textColor))
+                contaminator.player?.sendMessage(Component.text("You have contaminated the corpse.").color(Colors.VERY_RED.textColor))
             }
         }
 
@@ -602,120 +613,147 @@ class Session(
     }
 
     fun revive(player: Player, roleIfNotPresent: Role.Builder): String {
-        if (alivePlayers.containsKey(player.uniqueId)) {
-            return "Player already alive"
-        }
+        val sessionPlayer = allPlayers[player.uniqueId]
 
-        deadPlayers[player.uniqueId]?.let { corpse ->
-            val sessionPlayer = corpse.player
-            val deadLoc = corpse.mannequin.location
+        if (sessionPlayer == null) {
+            val sessionPlayer = SessionPlayer(
+                uniqueId = player.uniqueId,
+                name = player.name,
+                role = roleIfNotPresent.build(),
+                server = server,
+                playerCommunicationManager = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY))
+            )
 
-            deadPlayers.remove(sessionPlayer.uniqueId)
-            corpse.mannequin.remove()
-
-            alivePlayers[sessionPlayer.uniqueId] = sessionPlayer
             allPlayers[sessionPlayer.uniqueId] = sessionPlayer
-
             initPlayer(sessionPlayer.onlineSessionPlayer!!)
-            player.teleport(deadLoc)
+
+            return "Player brought back with role"
+        } else {
+            if (sessionPlayer.isAlive) {
+                return "Player already alive"
+            }
+
+            val sessionPlayer = sessionPlayer.onlineSessionPlayer ?: return "Player is not online"
+            sessionPlayer.isAlive = true
+            initPlayer(sessionPlayer)
 
             return "Player brought back"
         }
 
-        val sessionPlayer = SessionPlayer(
-            uniqueId = player.uniqueId,
-            name = player.name,
-            role = roleIfNotPresent.build(),
-            server = server,
-            playerCommunicationManager = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY))
-        )
-
-        allPlayers[player.uniqueId] = sessionPlayer
-        alivePlayers[player.uniqueId] = sessionPlayer
-
-        initPlayer(sessionPlayer.onlineSessionPlayer!!)
-
-        return "Player brought back with role"
-    }
-
-    // Returns true if handled
-    fun onRightClickItem(player: Player, item: ItemStack, hand: EquipmentSlot): Boolean {
-        val sessionPlayer: SessionPlayer = allPlayers[player.uniqueId] ?: return false
-
-//        item.persistentDataContainer.get(ItemStacks.ROLE_EQUIPMENT_KEY, PersistentDataType.STRING)?.let { equipmentType ->
-//            if (sessionPlayer.role.handleEquipmentUse(this, sessionPlayer.onlineSessionPlayer!!, item, equipmentType, null)) {
-//                player.swingHand(hand)
-//            }
-//            return true
+//        if (alivePlayers.containsKey(player.uniqueId)) {
+//            return "Player already alive"
 //        }
 //
-//        item.persistentDataContainer.get(ItemStacks.ROLE_MATERIAL_KEY, PersistentDataType.STRING)?.let { materialType ->
-//            if (sessionPlayer.role.handleMaterialUse(this, sessionPlayer.onlineSessionPlayer!!, item, materialType, null)) {
-//                player.swingHand(hand)
-//            }
-//            return true
-//        }
-
-        return false
-    }
-
-    fun onPlayerRightClickBlock(player: Player, item: ItemStack?, block: Location, hand: EquipmentSlot): Boolean {
-        val targetIsBell = block.isSameBlockAs(settings.bellLocation)
-        val meetingNotOnCooldown = meetingCooldown <= 0
-        val playerAlive = isPlayerAlive(player)
-
-        if (playerAlive && targetIsBell) {
-            if (activeMeeting == null && meetingNotOnCooldown && !onFinalStage()) {
-                startMeeting()
-                player.swingHand(EquipmentSlot.HAND)
-            } else if (activeMeeting != null) {
-                activeMeeting!!.onBellClicked(player)
-                player.swingHand(EquipmentSlot.HAND)
-            }
-            return true
-        }
-
-        val sessionPlayer: SessionPlayer = alivePlayers[player.uniqueId] ?: run {
-            return false
-        }
-
-//        item?.persistentDataContainer?.get(ItemStacks.ROLE_EQUIPMENT_KEY, PersistentDataType.STRING)?.let { equipmentType ->
-//            if (sessionPlayer.role.handleEquipmentUse(this, sessionPlayer.onlineSessionPlayer!!, item, equipmentType, block)) {
-//                player.swingHand(hand)
-//            }
-//            return true
+//        deadPlayers[player.uniqueId]?.let { corpse ->
+//            val sessionPlayer = corpse.player
+//            val deadLoc = corpse.mannequin.location
+//
+//            deadPlayers.remove(sessionPlayer.uniqueId)
+//            corpse.mannequin.remove()
+//
+//            alivePlayers[sessionPlayer.uniqueId] = sessionPlayer
+//            allPlayers[sessionPlayer.uniqueId] = sessionPlayer
+//
+//            initPlayer(sessionPlayer.onlineSessionPlayer!!)
+//            player.teleport(deadLoc)
+//
+//            return "Player brought back"
 //        }
 //
-//        item?.persistentDataContainer?.get(ItemStacks.ROLE_MATERIAL_KEY, PersistentDataType.STRING)?.let { materialType ->
-//            if (sessionPlayer.role.handleEquipmentUse(this, sessionPlayer.onlineSessionPlayer!!, item, materialType, block)) {
-//                player.swingHand(hand)
-//            }
-//            return true
-//        }
-
-        return false
-    }
-
-    // Returns true if handled
-    fun onPlayerRightClickEntity(player: Player, item: ItemStack?, hand: EquipmentSlot, entity: Entity): Boolean {
-        val sessionPlayer: SessionPlayer = allPlayers[player.uniqueId] ?: return false
-
-//        item?.persistentDataContainer?.get(ItemStacks.ROLE_EQUIPMENT_KEY, PersistentDataType.STRING)?.let { equipmentType ->
-//            if (sessionPlayer.role.handleEquipmentUseOnEntity(this, sessionPlayer.onlineSessionPlayer!!, item, equipmentType, entity)) {
-//                player.swingHand(hand)
-//            }
-//            return true
-//        }
+////        val sessionPlayer = SessionPlayer(
+////            uniqueId = player.uniqueId,
+////            name = player.name,
+////            role = roleIfNotPresent.build(),
+////            server = server,
+////            playerCommunicationManager = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY))
+////        )
 //
-//        item?.persistentDataContainer?.get(ItemStacks.ROLE_MATERIAL_KEY, PersistentDataType.STRING)?.let { materialType ->
-//            if (sessionPlayer.role.handleMaterialUseOnEntity(this, sessionPlayer.onlineSessionPlayer!!, item, materialType, entity)) {
-//                player.swingHand(hand)
-//            }
-//            return true
-//        }
-
-        return false
+//        allPlayers[player.uniqueId] = sessionPlayer
+//        alivePlayers[player.uniqueId] = sessionPlayer
+//
+//        initPlayer(sessionPlayer.onlineSessionPlayer!!)
+//
+//        return "Player brought back with role"
     }
+
+//    // Returns true if handled
+//    fun onRightClickItem(player: Player, item: ItemStack, hand: EquipmentSlot): Boolean {
+//        val sessionPlayer: SessionPlayer = allPlayers[player.uniqueId] ?: return false
+//
+////        item.persistentDataContainer.get(ItemStacks.ROLE_EQUIPMENT_KEY, PersistentDataType.STRING)?.let { equipmentType ->
+////            if (sessionPlayer.role.handleEquipmentUse(this, sessionPlayer.onlineSessionPlayer!!, item, equipmentType, null)) {
+////                player.swingHand(hand)
+////            }
+////            return true
+////        }
+////
+////        item.persistentDataContainer.get(ItemStacks.ROLE_MATERIAL_KEY, PersistentDataType.STRING)?.let { materialType ->
+////            if (sessionPlayer.role.handleMaterialUse(this, sessionPlayer.onlineSessionPlayer!!, item, materialType, null)) {
+////                player.swingHand(hand)
+////            }
+////            return true
+////        }
+//
+//        return false
+//    }
+
+//    fun onPlayerRightClickBlock(event: Trait.Event, item: ItemStack?, block: Location, hand: EquipmentSlot): Boolean {
+////        val targetIsBell = block.isSameBlockAs(settings.bellLocation)
+////        val meetingNotOnCooldown = meetingCooldown <= 0
+////        val sessionPlayer = allPlayers[player.uniqueId] ?: return false
+////
+////        if (sessionPlayer.isAlive && targetIsBell) {
+////            if (activeMeeting == null && meetingNotOnCooldown && !onFinalStage()) {
+////                startMeeting()
+////                player.swingHand(EquipmentSlot.HAND)
+////            } else if (activeMeeting != null) {
+////                activeMeeting!!.onBellClicked(player)
+////                player.swingHand(EquipmentSlot.HAND)
+////            }
+////            return true
+////        }
+////
+////        val sessionPlayer: SessionPlayer = alivePlayers[player.uniqueId] ?: run {
+////            return false
+////        }
+////
+//////        item?.persistentDataContainer?.get(ItemStacks.ROLE_EQUIPMENT_KEY, PersistentDataType.STRING)?.let { equipmentType ->
+//////            if (sessionPlayer.role.handleEquipmentUse(this, sessionPlayer.onlineSessionPlayer!!, item, equipmentType, block)) {
+//////                player.swingHand(hand)
+//////            }
+//////            return true
+//////        }
+//////
+//////        item?.persistentDataContainer?.get(ItemStacks.ROLE_MATERIAL_KEY, PersistentDataType.STRING)?.let { materialType ->
+//////            if (sessionPlayer.role.handleEquipmentUse(this, sessionPlayer.onlineSessionPlayer!!, item, materialType, block)) {
+//////                player.swingHand(hand)
+//////            }
+//////            return true
+//////        }
+////
+////        return false
+//    }
+//
+//    // Returns true if handled
+//    fun onPlayerRightClickEntity(player: Player, item: ItemStack?, hand: EquipmentSlot, entity: Entity): Boolean {
+//        val sessionPlayer: SessionPlayer = allPlayers[player.uniqueId] ?: return false
+//
+////        item?.persistentDataContainer?.get(ItemStacks.ROLE_EQUIPMENT_KEY, PersistentDataType.STRING)?.let { equipmentType ->
+////            if (sessionPlayer.role.handleEquipmentUseOnEntity(this, sessionPlayer.onlineSessionPlayer!!, item, equipmentType, entity)) {
+////                player.swingHand(hand)
+////            }
+////            return true
+////        }
+////
+////        item?.persistentDataContainer?.get(ItemStacks.ROLE_MATERIAL_KEY, PersistentDataType.STRING)?.let { materialType ->
+////            if (sessionPlayer.role.handleMaterialUseOnEntity(this, sessionPlayer.onlineSessionPlayer!!, item, materialType, entity)) {
+////                player.swingHand(hand)
+////            }
+////            return true
+////        }
+//
+//        return false
+//    }
 
     fun onVote(voter: Player, vote: Vote): Component {
         val meeting = activeMeeting ?: return Component.text("There is no meeting active")
@@ -965,26 +1003,12 @@ class Session(
 
         forAllPlayers { player ->
             val message = player.playerCommunicationManager.tick()
-            player.actualPlayer?.sendActionBar(message)
+            player.player?.sendActionBar(message)
         }
 
         updateBell()
 
         activeMeeting?.onServerTicked()
-    }
-
-//    @EventHandler
-//    fun onEntityDeath(event: EntityDeathEvent) {
-//        if (event.entity is EnderDragon) {
-//            manager.endSession(EndGameReason.DragonDefeated)
-//        }
-//    }
-
-    @EventHandler
-    fun onItemDespawn(event: ItemDespawnEvent) {
-        if (event.entity.itemStack.persistentDataContainer.get(ItemStacks.ROLE_MATERIAL_KEY, PersistentDataType.STRING) == "manifesto") {
-            event.isCancelled = true
-        }
     }
 
     @EventHandler
@@ -1128,7 +1152,7 @@ class Session(
             player = sessionPlayer,
             isHandled = false,
             isCancelled = false,
-            doAnimation = false,
+            willAnimate = false,
         )
         for (trait in sessionPlayer.traits) {
             if (!sessionPlayer.isAlive && !trait.settings.activeWhileDead) {
@@ -1176,7 +1200,7 @@ class Session(
             for ((i, equipment) in wrapper.equipment.withIndex()) {
                 if (equipment == null) continue
                 val item = SpigotConversionUtil.toBukkitItemStack(equipment.item)
-                if (item.persistentDataContainer.get(ItemStacks.CONCEALED_KEY, PersistentDataType.BOOLEAN) == true) {
+                if (item.concealed) {
                     changeTracked = true
                     wrapper.equipment[i] = Equipment(equipment.slot, com.github.retrooper.packetevents.protocol.item.ItemStack.EMPTY)
                 }
@@ -1430,7 +1454,7 @@ class Session(
 //            return
 //        }
 
-        if (event.itemDrop.itemStack.persistentDataContainer.has(ItemStacks.ROLE_EQUIPMENT_KEY)) {
+        if (event.itemDrop.itemStack.bound) {
             event.isCancelled = true
         }
 //
@@ -1445,10 +1469,10 @@ class Session(
 
 
     @EventHandler
-    fun onPlayerInteractEntity(event: PlayerInteractEntityEvent) {
-        val player = event.player
+    fun onPlayerInteractEntity(outerEvent: PlayerInteractEntityEvent) {
+        val player = outerEvent.player
 
-        val passthrough = event.rightClicked.persistentDataContainer.get(INTERACTION_PASSTHROUGH_KEY, PersistentDataType.STRING)
+        val passthrough = outerEvent.rightClicked.persistentDataContainer.get(INTERACTION_PASSTHROUGH_KEY, PersistentDataType.STRING)
         if (passthrough != null) {
             val entity = player.server.getEntity(UUID.fromString(passthrough))
 
@@ -1456,24 +1480,29 @@ class Session(
                 val passthroughEvent = PlayerInteractEntityEvent(
                     player,
                     entity,
-                    event.hand
+                    outerEvent.hand
                 )
                 player.server.pluginManager.callEvent(passthroughEvent)
-                event.isCancelled = passthroughEvent.isCancelled
+                outerEvent.isCancelled = passthroughEvent.isCancelled
 
                 return
             }
         }
 
-        val handled = this.onPlayerRightClickEntity(
-            player,
-            player.inventory.getItem(event.hand),
-            event.hand,
-            event.rightClicked
-        )
-        if (handled) {
-            event.isCancelled = true
-            return
+        val sessionPlayer = allPlayers[player.uniqueId] ?: return
+
+        val event = doTraitEvent(sessionPlayer) { trait, event ->
+            trait.onRightClick(
+                event,
+                itemStack = player.inventory.getItem(outerEvent.hand),
+                block = null,
+                entity = outerEvent.rightClicked
+            )
+        }
+
+        outerEvent.isCancelled = event.isCancelled
+        if (event.willAnimate) {
+            outerEvent.player.swingHand(outerEvent.hand)
         }
     }
 
@@ -1485,33 +1514,25 @@ class Session(
     }
 
     @EventHandler
-    fun onPlayerInteract(event: PlayerInteractEvent) {
-        if (!event.action.isRightClick) {
+    fun onPlayerInteract(outerEvent: PlayerInteractEvent) {
+        if (!outerEvent.action.isRightClick) {
             return
         }
 
-        val player = event.player
+        val sessionPlayer = allPlayers[outerEvent.player.uniqueId] ?: return
 
-        event.clickedBlock?.let { clickedBlock ->
-            val handled = this.onPlayerRightClickBlock(
-                player,
-                event.item,
-                clickedBlock.location.toBlockLocation(),
-                event.hand ?: EquipmentSlot.HAND
+        val event = doTraitEvent(sessionPlayer) { trait, event ->
+            trait.onRightClick(
+                event,
+                itemStack = outerEvent.item,
+                block = outerEvent.clickedBlock,
+                entity = null
             )
-
-            if (handled) {
-                event.isCancelled = true
-                return
-            }
         }
 
-        event.item?.let { item ->
-            val handled = this.onRightClickItem(player, item, event.hand ?: EquipmentSlot.HAND)
-            if (handled) {
-                event.isCancelled = true
-                return
-            }
+        outerEvent.isCancelled = event.isCancelled
+        if (event.willAnimate) {
+            outerEvent.player.swingHand(outerEvent.hand ?: EquipmentSlot.HAND)
         }
     }
 }

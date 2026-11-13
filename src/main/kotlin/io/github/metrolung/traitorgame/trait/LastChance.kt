@@ -33,7 +33,7 @@ class LastChance(
         event.isCancelled = true
         event.isHandled = true
 
-        event.player.actualPlayer?.sendTitlePart(
+        event.player.player?.sendTitlePart(
             TitlePart.TIMES,
             Title.Times.times(
                 Duration.ofMillis(100),
@@ -42,18 +42,18 @@ class LastChance(
             )
         )
 
-        event.player.actualPlayer?.sendTitlePart(
+        event.player.player?.sendTitlePart(
             TitlePart.TITLE,
             MiniMessage.deserialize("<gradient:#88f0fc:#ccffff><b>Last chance!</b></gradient>")
         )
 
-        event.player.actualPlayer?.playEffect(EntityEffect.PROTECTED_FROM_DEATH)
+        event.player.player?.playEffect(EntityEffect.PROTECTED_FROM_DEATH)
 
-        event.player.actualPlayer?.health = 5.0
-        event.player.actualPlayer?.addPotionEffect(PotionEffect(PotionEffectType.RESISTANCE, 200, 2, true, true))
-        event.player.actualPlayer?.addPotionEffect(PotionEffect(PotionEffectType.WEAKNESS, 200, 2, true, true))
-        event.player.actualPlayer?.addPotionEffect(PotionEffect(PotionEffectType.GLOWING, 200, 0, true, true))
-        event.player.actualPlayer?.addPotionEffect(PotionEffect(PotionEffectType.SPEED, 100, 0, true, true))
+        event.player.player?.health = 5.0
+        event.player.player?.addPotionEffect(PotionEffect(PotionEffectType.RESISTANCE, 200, 2, true, true))
+        event.player.player?.addPotionEffect(PotionEffect(PotionEffectType.WEAKNESS, 200, 2, true, true))
+        event.player.player?.addPotionEffect(PotionEffect(PotionEffectType.GLOWING, 200, 0, true, true))
+        event.player.player?.addPotionEffect(PotionEffect(PotionEffectType.SPEED, 100, 0, true, true))
     }
 
     override val settings: Trait.Settings

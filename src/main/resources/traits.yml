@@ -1,0 +1,10 @@
+
+sheriff:
+  amount: 0..2
+  chance: 100%
+coroner:
+  amount: 1
+  chance: 100%
+detective:
+  amount: 1
+  chance: 100%

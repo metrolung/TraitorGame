@@ -9,7 +9,7 @@ import xyz.xenondevs.invui.item.ItemBuilder
 
 class Detective : Trait {
     override fun onRolePresented(event: Trait.Event) {
-        event.player.actualPlayer!!.give(ItemStacks.sampleChecker)
+        event.player.player!!.give(ItemStacks.sampleChecker)
     }
 
     sealed interface DNASample {

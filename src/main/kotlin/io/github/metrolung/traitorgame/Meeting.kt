@@ -61,10 +61,6 @@ class Meeting(
             player.addPotionEffect(PotionEffect(PotionEffectType.BLINDNESS, 50, 1, false, false, false))
         }
 
-        for (player in session.alivePlayers.values) {
-            player.role.onMeetingStart(session, this, player)
-        }
-
         session.gatherAroundBell()
         server.playSound(Sound.sound {
             it.source(Sound.Source.BLOCK)
@@ -76,7 +72,7 @@ class Meeting(
     private fun javaVotingMenu(player: Player) {
         player.sendMessage(Component.empty())
 
-        for ((_, alivePlayer) in session.alivePlayers) {
+        for ((_, alivePlayer) in session.allPlayers) {
             player.sendMessage(
                 Component.empty()
                     .append(Component
@@ -132,7 +128,7 @@ class Meeting(
             "${TraitorGamePlugin.NAMESPACE}:vote end",
         )
 
-        for ((_, alivePlayer) in session.alivePlayers) {
+        for ((_, alivePlayer) in session.allPlayers) {
             val voteText = "Vote ${alivePlayer.name}"
 
             if (Floodgate.isFloodgatePlayer(alivePlayer.uniqueId)) {
@@ -290,7 +286,7 @@ class Meeting(
                 onMeetingEnd = a@{
                     val sessionPlayer = highestVote.player
 
-                    val player = sessionPlayer.actualPlayer
+                    val player = sessionPlayer.player
                     if (player == null) {
                         server.sendMessage(Component.text("${sessionPlayer.name} has been voted. "))
                         session.handlePlayerDeath(sessionPlayer, mutableListOf(), "Voted", mutableMapOf())
@@ -383,8 +379,8 @@ class Meeting(
         this.state = State.Finished
         onMeetingEnd()
 
-        for ((_, sessionPlayer) in session.alivePlayers) {
-            sessionPlayer.role.onMeetingEnd(this.session, this, sessionPlayer, turnout ?: mapOf())
+        for ((_, sessionPlayer) in session.allPlayers) {
+//            sessionPlayer.role.onMeetingEnd(this.session, this, sessionPlayer, turnout ?: mapOf())
 
             if (sessionPlayer.returnLocation != null) {
                 sessionPlayer.canReturn = true
@@ -419,12 +415,12 @@ class Meeting(
                 .text("${voter.name} has voted ")
                 .append(
                     Component
-                        .text("[${votes.size}/${session.alivePlayers.size}]")
+                        .text("[${votes.size}/${session.allPlayers.count { (_, sessionPlayer) -> !sessionPlayer.isAlive }}]")
                         .color(Colors.LIGHT_GRAY.textColor)
                 )
         )
 
-        if (votes.size == session.alivePlayers.size) {
+        if (votes.size == session.allPlayers.size) {
             this.startSuspense()
         }
 

@@ -7,23 +7,11 @@ import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.TraitorGamePlugin
 import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.role.RoleAlignment
+import io.github.metrolung.traitorgame.trait.Trait
 import org.bukkit.Material
 import xyz.xenondevs.invui.item.ItemBuilder
 
 interface Survivor : Role {
-
-    override fun isWinner(session: Session, sessionPlayer: SessionPlayer, endGameReason: EndGameReason): Boolean {
-        if (endGameReason is EndGameReason.SurvivorWin) {
-            return true
-        }
-
-        if (endGameReason is EndGameReason.DragonDefeated) {
-            return true
-        }
-
-        return super.isWinner(session, sessionPlayer, endGameReason)
-    }
-
     override val settings: Role.Settings
         get() = SETTINGS
 

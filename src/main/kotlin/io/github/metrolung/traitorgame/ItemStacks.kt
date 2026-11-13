@@ -17,14 +17,57 @@ import java.util.UUID
 
 object ItemStacks {
     val CONCEALED_KEY = TraitorGamePlugin.key("obscured")
-    val ROLE_EQUIPMENT_KEY = TraitorGamePlugin.key("equipment")
-    val ROLE_MATERIAL_KEY = TraitorGamePlugin.key("material")
+    val BOUND_KEY = TraitorGamePlugin.key("permanent")
+    val EPHEMERAL_KEY = TraitorGamePlugin.key("ephemeral")
+    val SPECIAL_KEY = TraitorGamePlugin.key("equipment")
 
-    fun ItemStack.concealed(concealed: Boolean = true) {
-        this.editPersistentDataContainer { pdc ->
-            pdc.set(CONCEALED_KEY, PersistentDataType.BOOLEAN, concealed)
+    var ItemStack.concealed: Boolean
+        set(value) {
+            this.editPersistentDataContainer { pdc ->
+                if (value) {
+                    pdc.set(CONCEALED_KEY, PersistentDataType.BOOLEAN, true)
+                } else {
+                    pdc.remove(CONCEALED_KEY)
+                }
+            }
         }
-    }
+        get() = this.persistentDataContainer.get(CONCEALED_KEY, PersistentDataType.BOOLEAN) == true
+
+    var ItemStack.bound: Boolean
+        set(value) {
+            this.editPersistentDataContainer { pdc ->
+                if (value) {
+                    pdc.set(BOUND_KEY, PersistentDataType.BOOLEAN, true)
+                } else {
+                    pdc.remove(BOUND_KEY)
+                }
+            }
+        }
+        get() = this.persistentDataContainer.get(CONCEALED_KEY, PersistentDataType.BOOLEAN) == true
+
+    var ItemStack.ephemeral: Boolean
+        set(value) {
+            this.editPersistentDataContainer { pdc ->
+                if (value) {
+                    pdc.set(EPHEMERAL_KEY, PersistentDataType.BOOLEAN, true)
+                } else {
+                    pdc.remove(EPHEMERAL_KEY)
+                }
+            }
+        }
+        get() = this.persistentDataContainer.get(CONCEALED_KEY, PersistentDataType.BOOLEAN) == true
+
+    var ItemStack.specialKey: String?
+        set(value) {
+            this.editPersistentDataContainer { pdc ->
+                if (value != null) {
+                    pdc.set(SPECIAL_KEY, PersistentDataType.BOOLEAN, true)
+                } else {
+                    pdc.remove(SPECIAL_KEY)
+                }
+            }
+        }
+        get() = this.persistentDataContainer.get(SPECIAL_KEY, PersistentDataType.STRING)
 
     fun manifesto(codeword: String): ItemStack = ItemStack.of(Material.BOOK).apply {
         this.setData(DataComponentTypes.ITEM_NAME, Component.text("Traitor's Manifesto").color(Colors.TRAITOR_RED.textColor))
@@ -40,9 +83,7 @@ object ItemStacks {
                     .decoration(TextDecoration.ITALIC, false)
             )
         )
-        this.editPersistentDataContainer { pdc ->
-            pdc.set(ROLE_MATERIAL_KEY, PersistentDataType.STRING, "manifesto")
-        }
+        this.specialKey = "manifesto"
     }
 
     val notebook: ItemStack
@@ -50,9 +91,8 @@ object ItemStacks {
             this.setData(DataComponentTypes.ITEM_NAME, Component.text("Notebook"))
             this.setData(DataComponentTypes.ITEM_MODEL, NamespacedKey.minecraft("writable_book"))
             this.lore(listOf("Shift + click to open".colored(Colors.VERY_YELLOW)))
-            this.editPersistentDataContainer { pdc ->
-                pdc.set(ROLE_EQUIPMENT_KEY, PersistentDataType.STRING, "notebook")
-            }
+            this.specialKey = "notebook"
+            this.bound = true
         }
 
     val merchandiseBox: ItemStack
@@ -60,10 +100,8 @@ object ItemStacks {
             this.setData(DataComponentTypes.ITEM_NAME, Component.text("Merchandise Box"))
             this.setData(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true)
             this.lore(listOf("Click to open".colored(Colors.VERY_YELLOW)))
-            this.editPersistentDataContainer { pdc ->
-                pdc.set(ROLE_EQUIPMENT_KEY, PersistentDataType.STRING, "merchandise_box")
-            }
-            this.concealed(true)
+            this.specialKey = "merchandise_box"
+            this.concealed = true
         }
 
     val sampleChecker: ItemStack
@@ -71,10 +109,8 @@ object ItemStacks {
             this.setData(DataComponentTypes.ITEM_NAME, Component.text("Sample Checker"))
             this.setData(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true)
             this.lore(listOf("Click to open".colored(Colors.VERY_YELLOW)))
-            this.editPersistentDataContainer { pdc ->
-                pdc.set(ROLE_EQUIPMENT_KEY, PersistentDataType.STRING, "sample_checker")
-            }
-            this.concealed(true)
+            this.specialKey = "sample_checker"
+            this.concealed = true
         }
 
     val swab: ItemStack
@@ -82,10 +118,8 @@ object ItemStacks {
             this.setData(DataComponentTypes.ITEM_NAME, "Swab".component)
             this.setData(DataComponentTypes.ITEM_MODEL, NamespacedKey.minecraft("bone"))
             this.lore(listOf("Click a player to swab them".colored(Colors.VERY_YELLOW)))
-            this.editPersistentDataContainer { pdc ->
-                pdc.set(ROLE_MATERIAL_KEY, PersistentDataType.STRING, "swab")
-            }
-            this.concealed(true)
+            this.specialKey = "swab"
+            this.concealed = true
         }
 
     val SAMPLE_KEY = TraitorGamePlugin.key("used_swab")
@@ -94,9 +128,9 @@ object ItemStacks {
         this.setData(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true)
         this.setData(DataComponentTypes.ITEM_MODEL, NamespacedKey.minecraft("bone"))
         this.editPersistentDataContainer { pdc ->
-            pdc.set(ROLE_MATERIAL_KEY, PersistentDataType.STRING, "used_swab")
             pdc.set(SAMPLE_KEY, PersistentDataType.INTEGER, index)
         }
+        this.specialKey = "used_swab"
     }
 
     val sheriffCrossbow: ItemStack

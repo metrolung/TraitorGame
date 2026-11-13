@@ -6,7 +6,9 @@ import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.colored
 import net.kyori.adventure.text.TextComponent
 import org.bukkit.NamespacedKey
+import org.bukkit.block.Block
 import org.bukkit.entity.Entity
+import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.invui.item.ItemProvider
 
 interface Trait {
@@ -62,19 +64,15 @@ interface Trait {
 //    fun onMeetingStart(session: Session, meeting: Meeting, sessionPlayer: SessionPlayer) = Unit
 //    fun onMeetingEnd(session: Session, meeting: Meeting, sessionPlayer: SessionPlayer, turnout: Map<Vote, Int>) = Unit
 //
+
+    fun onRightClick(event: Event, itemStack: ItemStack?, block: Block?, entity: Entity?) = Unit
+
     fun onRolePresented(event: Event) = Unit
-//
-//    fun onAnyPlayerTakeDamage(event: Event, damageInfo: DamageInfo) = Unit
 
     fun onAnyDamageDealt(event: Event, damage: DamageInfo) = Unit
 
     fun onTakeDamage(event: Event, damage: DamageInfo) = Unit
     fun onDealDamage(event: Event, damage: DamageInfo) = Unit
-
-//    fun onKilledByPlayer(session: Session, sessionPlayer: OnlineSessionPlayer, killer: OnlineSessionPlayer): Boolean = false
-//    fun onAttackingPlayer(session: Session, sessionPlayer: OnlineSessionPlayer, victim: OnlineSessionPlayer): Boolean = false
-//    fun onKillingPlayer(session: Session, sessionPlayer: OnlineSessionPlayer, victim: OnlineSessionPlayer): Boolean = false
-//    fun onAttackedByPlayer(session: Session, sessionPlayer: OnlineSessionPlayer, attacker: OnlineSessionPlayer): Boolean = false
 
     fun onTick(event: Event, tick: Int) {}
 
@@ -85,17 +83,17 @@ interface Trait {
         val player: SessionPlayer,
         var isHandled: Boolean = false,
         var isCancelled: Boolean = false,
-        var doAnimation: Boolean = false,
+        var willAnimate: Boolean = false,
     ) {
         fun handleAndCancel(doAnimation: Boolean = false) {
             this.isHandled = true
             this.isCancelled = true
-            this.doAnimation = doAnimation
+            this.willAnimate = doAnimation
         }
 
         fun handle(doAnimation: Boolean = false) {
             this.isHandled = true
-            this.doAnimation = doAnimation
+            this.willAnimate = doAnimation
         }
     }
 

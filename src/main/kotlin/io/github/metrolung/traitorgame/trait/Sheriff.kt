@@ -9,8 +9,8 @@ import xyz.xenondevs.invui.item.ItemBuilder
 
 class Sheriff : Trait {
     override fun onRolePresented(event: Trait.Event) {
-        event.player.actualPlayer?.give(ItemStacks.sheriffCrossbow)
-        event.player.actualPlayer?.give(ItemStack.of(Material.ARROW).apply { amount = 32 })
+        event.player.player?.give(ItemStacks.sheriffCrossbow)
+        event.player.player?.give(ItemStack.of(Material.ARROW).apply { amount = 32 })
     }
 
     override val settings: Trait.Settings

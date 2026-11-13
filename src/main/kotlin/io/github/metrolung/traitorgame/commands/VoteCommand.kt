@@ -4,6 +4,8 @@ import com.mojang.brigadier.Command
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
+import gg.aquatic.kommand.command
+import gg.aquatic.kommand.playerArgument
 import io.github.metrolung.traitorgame.TraitorGamePlugin
 import io.github.metrolung.traitorgame.Vote
 import io.papermc.paper.command.brigadier.CommandSourceStack
@@ -48,7 +50,7 @@ class VoteCommand(private val plugin: TraitorGamePlugin) {
 
         val voted = executor.server.getOfflinePlayer(playerName)
 
-        val votedSessionPlayer = session.alivePlayers[voted.uniqueId] ?: run {
+        val votedSessionPlayer = session.allPlayers[voted.uniqueId] ?: run {
             ctx.source.sender.sendPlainMessage("Could not find player")
             return Command.SINGLE_SUCCESS
         }

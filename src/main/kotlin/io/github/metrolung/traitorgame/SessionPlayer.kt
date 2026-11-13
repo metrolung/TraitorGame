@@ -32,11 +32,11 @@ class SessionPlayer(
     var isAlive: Boolean = true
     var activeEntity: Entity? = null
 
-    val actualPlayer: Player?
+    val player: Player?
         get() = server.getPlayer(uniqueId)
 
     val onlineSessionPlayer: OnlineSessionPlayer?
-        get() = actualPlayer?.let { player -> OnlineSessionPlayer(player, this) }
+        get() = player?.let { player -> OnlineSessionPlayer(player, this) }
 
     val queuedActionsWhenOnline: MutableList<(OnlineSessionPlayer) -> Unit> = mutableListOf()
 
@@ -86,7 +86,7 @@ data class OnlineSessionPlayer(val player: Player, val sessionPlayer: SessionPla
         get() = sessionPlayer.canReturn
         set(value) { sessionPlayer.canReturn = value }
 
-    var isDead: Boolean
+    var isAlive: Boolean
         get() = sessionPlayer.isAlive
         set(value) { sessionPlayer.isAlive = value }
 
