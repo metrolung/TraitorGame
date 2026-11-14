@@ -11,7 +11,7 @@ import org.bukkit.plugin.Plugin
 import java.io.File
 
 
-class Registry<T>(
+class ConfigurableItemRegistry<T>(
     val parseOneLiner: ((String) -> ConfigurationSection?)? = null
 ) {
     data class RegisteredRecord<T>(
@@ -91,8 +91,8 @@ fun traitOrRoleOneLiner(string: String): ConfigurationSection {
     return config
 }
 
-val TraitRegistry = Registry<Trait.Settings>(::traitOrRoleOneLiner)
-val RoleRegistry = Registry<Role.Settings>(::traitOrRoleOneLiner)
+val TraitRegistry = ConfigurableItemRegistry<Trait.Settings>(::traitOrRoleOneLiner)
+val RoleRegistry = ConfigurableItemRegistry<Role.Settings>(::traitOrRoleOneLiner)
 //class Registry {
 //    val traits: MutableMap<Key, Trait.Settings> = mutableMapOf()
 //    val roles: MutableMap<Key, Role.Settings> = mutableMapOf()

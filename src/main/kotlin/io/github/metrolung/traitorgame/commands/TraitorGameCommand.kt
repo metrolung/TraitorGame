@@ -49,28 +49,28 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
                     )
                 )
             )
-            .then(Commands.literal("revive")
-                .then(Commands.argument("target", ArgumentTypes.players())
-                    .executes { ctx -> this.executeRevive(
-                        ctx,
-                        ctx.getArgument("target", PlayerSelectorArgumentResolver::class.java).resolve(ctx.source).asIterable(),
-                        null,
-                    ) }
-                    .then(Commands.argument("role", ArgumentTypes.namespacedKey())
-                        .suggests { _, builder ->
-                            for (key in plugin.roleManager.keys) {
-                                builder.suggest(key.toString())
-                            }
-                            builder.buildFuture()
-                        }
-                        .executes { ctx -> this.executeRevive(
-                            ctx,
-                            ctx.getArgument("target", PlayerSelectorArgumentResolver::class.java).resolve(ctx.source).asIterable(),
-                            ctx.getArgument("role", NamespacedKey::class.java),
-                        ) }
-                    )
-                )
-            )
+//            .then(Commands.literal("revive")
+//                .then(Commands.argument("target", ArgumentTypes.players())
+////                    .executes { ctx -> this.executeRevive(
+////                        ctx,
+////                        ctx.getArgument("target", PlayerSelectorArgumentResolver::class.java).resolve(ctx.source).asIterable(),
+////                        null,
+////                    ) }
+////                    .then(Commands.argument("role", ArgumentTypes.namespacedKey())
+////                        .suggests { _, builder ->
+////                            for (key in plugin.roleManager.keys) {
+////                                builder.suggest(key.toString())
+////                            }
+////                            builder.buildFuture()
+////                        }
+////                        .executes { ctx -> this.executeRevive(
+////                            ctx,
+////                            ctx.getArgument("target", PlayerSelectorArgumentResolver::class.java).resolve(ctx.source).asIterable(),
+////                            ctx.getArgument("role", NamespacedKey::class.java),
+////                        ) }
+////                    )
+//                )
+//            )
             .then(Commands.literal("end")
                 .executes { ctx -> this.executeEnd(ctx) }
             )
@@ -89,26 +89,26 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
                 .executes { ctx -> this.executeReloadConfigs(ctx) }
             )
     }
-    
-    private fun executeRevive(ctx: CommandContext<CommandSourceStack>, players: Iterable<Player>, roleKey: NamespacedKey?): Int {
-        val session = plugin.sessionManager.session ?: run {
-            ctx.source.sender.sendPlainMessage("No active session")
-            return Command.SINGLE_SUCCESS
-        }
-
-        val survivor = plugin.roleManager.getRoleConfiguration(TraitorGamePlugin.key("survivor"))!!
-        val role = if (roleKey == null) {
-            survivor.settings
-        } else {
-            plugin.roleManager.getRoleConfiguration(roleKey)?.settings ?: survivor.settings
-        }
-
-        for (player in players) {
-            val result = session.revive(player, role.builder)
-            ctx.source.sender.sendMessage(result.component)
-        }
-        return Command.SINGLE_SUCCESS
-    }
+//
+//    private fun executeRevive(ctx: CommandContext<CommandSourceStack>, players: Iterable<Player>, roleKey: NamespacedKey?): Int {
+//        val session = plugin.sessionManager.session ?: run {
+//            ctx.source.sender.sendPlainMessage("No active session")
+//            return Command.SINGLE_SUCCESS
+//        }
+//
+//        val survivor = plugin.roleManager.getRoleConfiguration(TraitorGamePlugin.key("survivor"))!!
+//        val role = if (roleKey == null) {
+//            survivor.settings
+//        } else {
+//            plugin.roleManager.getRoleConfiguration(roleKey)?.settings ?: survivor.settings
+//        }
+//
+//        for (player in players) {
+//            val result = session.revive(player, role.builder)
+//            ctx.source.sender.sendMessage(result.component)
+//        }
+//        return Command.SINGLE_SUCCESS
+//    }
 
     private fun executeStart(
         ctx: CommandContext<CommandSourceStack>,
@@ -124,7 +124,6 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
         plugin.sessionManager.startSession(
             plugin.server,
             plugin,
-            plugin.roleManager,
             SessionSettings.create(
                 plugin,
                 traitorCount,

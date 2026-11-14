@@ -110,10 +110,10 @@ class Session(
 //        field: MutableBiMap<UUID, SessionCorpse>
 
     init {
-        val traitorPool = RandomPoolBuilder(
-            settings.traitorCount,
-            default = { Traitor() }
-        )
+//        val traitorPool = RandomPoolBuilder(
+//            settings.traitorCount,
+//            default = { Traitor() }
+//        )
         
 //        val pool = RandomPoolBuilder(
 //            server.onlinePlayers.size,
@@ -122,28 +122,28 @@ class Session(
 //        
 //        pool.addSample(settings.traitorCount)
 
-        val roles = roleManager.generatePool(
+        val roles = generateRolePool(
             server.onlinePlayers.size,
             settings.traitorCount,
+            settings.evilNeutralCount,
             settings.passiveNeutralCount,
-            settings.evilNeutralCount
         )
 
-        val players: MutableBiMap<UUID, SessionPlayer> = mutableBiMapOf()
-        for ((roleIdx, player) in server.onlinePlayers.withIndex()) {
-            val sessionPlayer = SessionPlayer(
-                player.uniqueId,
-                player.name,
-                roles[roleIdx].settings.builder.build(),
-                server,
-                PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY))
+        val survivorTraits = generateSurvivorTraitPool(server.onlinePlayers.size)
+
+        val players = mutableBiMapOf<UUID, SessionPlayer>()
+        for ((idx, player) in server.onlinePlayers.withIndex()) {
+            players[player.uniqueId] = SessionPlayer(
+                uniqueId = player.uniqueId,
+                name = player.name,
+                role = roles[idx],
+                server = server,
+                playerCommunicationManager = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY)),
+                survivorTraits[idx]
             )
-            players[player.uniqueId] = sessionPlayer
         }
 
-//        alivePlayers = players
-        allPlayers = players
-//        deadPlayers = mutableMapOf()
+        this.allPlayers = players
         this.bellLabel = settings.bellLocation.getWorld()
             .createEntity(settings.bellLocation, TextDisplay::class.java)
         this.bellBlock = settings.bellLocation.getWorld()
@@ -347,7 +347,7 @@ class Session(
             player.sendMessage(
                 Component.empty()
                     .append(Component.text("GOAL").decorate(TextDecoration.BOLD).color(Colors.VERY_YELLOW.textColor))
-                    .append(": ${sessionPlayer.role.settings.goalProvider(settings.roleSettings)}")
+//                    .append(": ${sessionPlayer.role.settings.goalProvider(settings.roleSettings)}")
             )
 
             player.sendMessage("")
@@ -612,14 +612,14 @@ class Session(
         return !event.player.combatTracker.isInCombat
     }
 
-    fun revive(player: Player, roleIfNotPresent: Role.Builder): String {
+    fun revive(player: Player, roleIfNotPresent: Role): String {
         val sessionPlayer = allPlayers[player.uniqueId]
 
         if (sessionPlayer == null) {
             val sessionPlayer = SessionPlayer(
                 uniqueId = player.uniqueId,
                 name = player.name,
-                role = roleIfNotPresent.build(),
+                role = roleIfNotPresent,
                 server = server,
                 playerCommunicationManager = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY))
             )

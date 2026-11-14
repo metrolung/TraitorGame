@@ -14,7 +14,7 @@ class SessionPlayer(
     val role: Role,
     val server: Server,
     val playerCommunicationManager: PlayerCommunicationManager,
-    vararg defaultTraits: Trait
+    vararg defaultTraits: Trait?
 ) {
     val traits = sortedSetOf<Trait>(Comparator { a, b ->
         b.settings.priority.compareTo(a.settings.priority)
@@ -23,7 +23,8 @@ class SessionPlayer(
 
     init {
         for (trait in defaultTraits) {
-            traits.add(trait)
+            if (trait != null)
+                traits.add(trait)
         }
     }
 

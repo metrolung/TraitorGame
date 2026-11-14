@@ -4,8 +4,6 @@ import com.mojang.brigadier.Command
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
-import gg.aquatic.kommand.command
-import gg.aquatic.kommand.playerArgument
 import io.github.metrolung.traitorgame.TraitorGamePlugin
 import io.github.metrolung.traitorgame.Vote
 import io.papermc.paper.command.brigadier.CommandSourceStack

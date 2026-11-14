@@ -1,12 +1,14 @@
 package io.github.metrolung.traitorgame.trait
 
 import io.github.metrolung.traitorgame.OnlineSessionPlayer
+import io.github.metrolung.traitorgame.ConfigurableItemRegistry
 import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.colored
 import net.kyori.adventure.text.TextComponent
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
+import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.entity.Entity
 import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.invui.item.ItemProvider
@@ -106,7 +108,7 @@ interface Trait {
     )
 
     fun interface Builder {
-        fun build(): Trait
+        fun build(config: ConfigurationSection): Trait
     }
 
     data class Settings(
@@ -119,5 +121,9 @@ interface Trait {
         val stylized: TextComponent = name.colored(traitColor),
         val itemProvider: ItemProvider,
         val builder: Trait.Builder,
-    )
+    ) {
+        fun register(configurableItemRegistry: ConfigurableItemRegistry<Trait.Settings>) {
+            configurableItemRegistry.register(this.key, this)
+        }
+    }
 }
