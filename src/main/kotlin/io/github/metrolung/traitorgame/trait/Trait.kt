@@ -4,7 +4,10 @@ import io.github.metrolung.traitorgame.OnlineSessionPlayer
 import io.github.metrolung.traitorgame.ConfigurableItemRegistry
 import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.SessionPlayer
+import io.github.metrolung.traitorgame.TraitRegistry
 import io.github.metrolung.traitorgame.colored
+import io.github.metrolung.traitorgame.component
+import io.github.metrolung.traitorgame.role.Role
 import net.kyori.adventure.text.TextComponent
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
@@ -14,7 +17,6 @@ import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.invui.item.ItemProvider
 
 interface Trait {
-
     fun getWinCondition(session: Session, sessionPlayer: SessionPlayer) = WinCondition.Default
 
     enum class WinCondition {
@@ -80,6 +82,23 @@ interface Trait {
 
     val settings: Settings
 
+    interface TraitCause {
+        fun getSimpleCauseMessage(): TextComponent?
+
+        object Unspecified : TraitCause {
+            override fun getSimpleCauseMessage() = null
+        }
+        object AssignedToAll : TraitCause {
+            override fun getSimpleCauseMessage() = "Common".component
+        }
+        object RandomlyAssigned : TraitCause {
+            override fun getSimpleCauseMessage() = null
+        }
+        data class CausedByRole(val role: Role) : TraitCause {
+            override fun getSimpleCauseMessage() = role.settings.stylized
+        }
+    }
+
     class Event(
         val session: Session,
         val player: SessionPlayer,
@@ -107,10 +126,6 @@ interface Trait {
         val isKilling: Boolean,
     )
 
-    fun interface Builder {
-        fun build(config: ConfigurationSection): Trait
-    }
-
     data class Settings(
         val key: NamespacedKey,
         val priority: Double = 0.0,
@@ -120,10 +135,15 @@ interface Trait {
         val traitColor: Int,
         val stylized: TextComponent = name.colored(traitColor),
         val itemProvider: ItemProvider,
-        val builder: Trait.Builder,
+        val descriptionProvider: () -> String,
+        val provider: () -> Trait,
     ) {
-        fun register(configurableItemRegistry: ConfigurableItemRegistry<Trait.Settings>) {
+        fun register(configurableItemRegistry: ConfigurableItemRegistry<Trait.Settings> = TraitRegistry) {
             configurableItemRegistry.register(this.key, this)
+        }
+
+        fun getConfig(configurableItemRegistry: ConfigurableItemRegistry<Trait.Settings> = TraitRegistry): ConfigurationSection? {
+            return configurableItemRegistry.getConfig(this.key)
         }
     }
 }

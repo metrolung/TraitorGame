@@ -79,8 +79,8 @@ class Jester : Neutral {
             roleColor = Colors.JESTER_PEACH,
             alignment = RoleAlignment.EVIL_NEUTRAL,
             itemProvider = ItemBuilder(Material.CROSSBOW),
-            goalProvider = { "Get killed by a non evil player. Avoid attacking players as much as possible." },
-            builder = { Jester() }
+            descriptionProvider = { "Get killed by a non evil player. Avoid attacking players as much as possible." },
+            provider = { Jester() }
         )
     }
 }

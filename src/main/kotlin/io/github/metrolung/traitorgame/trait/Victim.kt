@@ -2,12 +2,8 @@ package io.github.metrolung.traitorgame.trait
 
 import io.github.metrolung.traitorgame.Colors
 import io.github.metrolung.traitorgame.EndGameReason
-import io.github.metrolung.traitorgame.OnlineSessionPlayer
-import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.TraitorGamePlugin
 import org.bukkit.Material
-import org.bukkit.entity.Item
-import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.invui.item.ItemBuilder
 
 object Victim : Trait {
@@ -25,6 +21,7 @@ object Victim : Trait {
         name = "Victim",
         traitColor = Colors.LAST_CHANCE,
         itemProvider = ItemBuilder(Material.CHICKEN),
-        builder = { LastChance() }
+        descriptionProvider = { "Victim Provider" },
+        provider = { Victim }
     )
 }

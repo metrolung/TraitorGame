@@ -28,9 +28,21 @@ class ConfigurableItemRegistry<T>(
         configurationFiles[plugin.namespace()] = configurationSection
     }
 
+    operator fun get(key: Key): RegisteredRecord<T>? {
+        return registered[key]
+    }
+
+    fun getConfig(key: Key): ConfigurationSection? {
+        return registered[key]?.configurationSection
+    }
+
+    operator fun iterator(): Iterator<Map.Entry<Key, RegisteredRecord<T>>> {
+        return registered.asIterable().iterator()
+    }
+
     fun setConfigurationFile(plugin: Plugin, file: File) {
         val config = YamlConfiguration.loadConfiguration(file)
-        configurationFiles[plugin.namespace()] = config
+        addConfiguration(plugin, config)
     }
 
     fun register(key: Key, value: T) {
@@ -70,8 +82,8 @@ fun traitOrRoleOneLiner(string: String): ConfigurationSection {
         try {
             if (sub.endsWith("%")) {
                 chance = sub.substring(0, sub.length - 2).toDouble()
-            } else if (sub.contains("-")) {
-                val minAndMax = sub.split("-")
+            } else if (sub.contains("..")) {
+                val minAndMax = sub.split("..")
                 min = minAndMax[0].toInt()
                 max = minAndMax[1].toInt()
             } else {
@@ -84,8 +96,7 @@ fun traitOrRoleOneLiner(string: String): ConfigurationSection {
 
     val config = MemoryConfiguration()
 
-    config.set("min", min)
-    config.set("min", max)
+    config.set("amount", "${min}..${max}")
     config.set("chance", chance)
 
     return config

@@ -22,7 +22,8 @@ class Sheriff : Trait {
             name = "Sheriff",
             traitColor = Colors.LAST_CHANCE,
             itemProvider = ItemBuilder(Material.CROSSBOW),
-            builder = { LastChance() }
+            descriptionProvider = { "Sheriff description" },
+            provider = { Sheriff() }
         )
     }
 }

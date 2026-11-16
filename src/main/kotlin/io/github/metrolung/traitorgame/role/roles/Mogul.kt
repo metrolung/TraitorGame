@@ -1,44 +1,13 @@
 package io.github.metrolung.traitorgame.role.roles
 
 import io.github.metrolung.traitorgame.Colors
-import io.github.metrolung.traitorgame.EndGameReason
-import io.github.metrolung.traitorgame.ItemStacks
-import io.github.metrolung.traitorgame.OnlineSessionPlayer
-import io.github.metrolung.traitorgame.Session
-import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.TraitorGamePlugin
-import io.github.metrolung.traitorgame.colored
-import io.github.metrolung.traitorgame.component
 import io.github.metrolung.traitorgame.role.Neutral
 import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.role.RoleAlignment
 import io.github.metrolung.traitorgame.trait.Trait
-import io.papermc.paper.datacomponent.DataComponentTypes
-import io.papermc.paper.datacomponent.item.PotionContents
-import io.papermc.paper.datacomponent.item.TooltipDisplay
-import net.kyori.adventure.text.Component
-import org.bukkit.Location
 import org.bukkit.Material
-import org.bukkit.entity.Player
-import org.bukkit.inventory.ItemStack
-import org.bukkit.inventory.ItemType
-import org.bukkit.persistence.PersistentDataType
-import org.bukkit.potion.PotionEffect
-import org.bukkit.potion.PotionEffectType
-import org.bukkit.potion.PotionType
-import xyz.xenondevs.invui.dsl.ExperimentalDslApi
-import xyz.xenondevs.invui.dsl.gui
-import xyz.xenondevs.invui.dsl.item
-import xyz.xenondevs.invui.dsl.itemProvider
-import xyz.xenondevs.invui.dsl.stonecutterWindow
-import xyz.xenondevs.invui.gui.Gui
-import xyz.xenondevs.invui.gui.set
-import xyz.xenondevs.invui.item.Item
 import xyz.xenondevs.invui.item.ItemBuilder
-import xyz.xenondevs.invui.item.ItemWrapper
-import kotlin.also
-import kotlin.math.min
-import kotlin.random.Random
 
 class Mogul : Neutral {
 
@@ -368,8 +337,8 @@ class Mogul : Neutral {
             roleColor = Colors.NEUTRAL_YELLOW,
             alignment = RoleAlignment.PASSIVE_NEUTRAL,
             itemProvider = ItemBuilder(Material.CROSSBOW),
-            goalProvider = { roleSettings -> "You have no allegiances. Collect $${"placeholder"} to win." },
-            builder = { Mogul() }
+            descriptionProvider = { "Mogul description" },
+            provider = { Mogul() }
         )
     }
 }

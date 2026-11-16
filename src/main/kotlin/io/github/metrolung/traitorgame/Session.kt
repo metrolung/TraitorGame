@@ -17,19 +17,21 @@ import io.github.metrolung.traitorgame.achievements.Achievement
 import io.github.metrolung.traitorgame.achievements.TheFinalStage
 import io.github.metrolung.traitorgame.api.Floodgate
 import io.github.metrolung.traitorgame.role.Role
-import io.github.metrolung.traitorgame.role.roles.Survivor
-import io.github.metrolung.traitorgame.role.roles.Traitor
+import io.github.metrolung.traitorgame.trait.LastChance
 import io.github.metrolung.traitorgame.trait.Trait
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
+import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.datacomponent.item.ResolvableProfile
 import io.papermc.paper.event.entity.EntityEquipmentChangedEvent
 import io.papermc.paper.event.player.AsyncChatEvent
+import net.kyori.adventure.key.Key
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.event.HoverEvent
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.`object`.ObjectContents
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.TitlePart
@@ -61,6 +63,7 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.ItemType
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
 import org.bukkit.potion.PotionEffect
@@ -133,14 +136,23 @@ class Session(
 
         val players = mutableBiMapOf<UUID, SessionPlayer>()
         for ((idx, player) in server.onlinePlayers.withIndex()) {
-            players[player.uniqueId] = SessionPlayer(
+            val role = roles[idx]
+            val sessionPlayer = SessionPlayer(
                 uniqueId = player.uniqueId,
                 name = player.name,
-                role = roles[idx],
+                role = role,
                 server = server,
-                playerCommunicationManager = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY)),
-                survivorTraits[idx]
             )
+            survivorTraits[idx]?.let { trait ->
+                sessionPlayer.giveTrait(trait, Trait.TraitCause.RandomlyAssigned)
+            }
+
+            sessionPlayer.giveTrait(LastChance(), Trait.TraitCause.AssignedToAll)
+            for (roleTrait in role.roleTraits) {
+                sessionPlayer.giveTrait(roleTrait.provider(), Trait.TraitCause.CausedByRole(role))
+            }
+
+            players[player.uniqueId] = sessionPlayer
         }
 
         this.allPlayers = players
@@ -334,9 +346,13 @@ class Session(
                 it.type(NamespacedKey.minecraft("entity.evoker.prepare_summon"))
             })
 
+            player.sendMessage("")
+
             player.sendMessage(
                 Component.text {
                     it.append("You are: ".component)
+                    it.append((sessionPlayer.role.settings.itemProvider.get().getData(DataComponentTypes.ITEM_MODEL) ?: Key.key("item/golden_carrot")).asString().component)
+                    it.append(" ".component)
                     it.append(sessionPlayer.role.settings.stylized)
                     it.append(" [".component)
                     it.append(sessionPlayer.role.settings.alignment.stylized)
@@ -344,16 +360,36 @@ class Session(
                 }
             )
 
-            player.sendMessage(
-                Component.empty()
-                    .append(Component.text("GOAL").decorate(TextDecoration.BOLD).color(Colors.VERY_YELLOW.textColor))
-//                    .append(": ${sessionPlayer.role.settings.goalProvider(settings.roleSettings)}")
-            )
+            player.sendMessage(Component.text {
+                it.append(sessionPlayer.role.settings.descriptionProvider().component)
+            }.color(Colors.LIGHT_GRAY.textColor))
+
+            val traits = sessionPlayer.traits()
+
+            if (traits.count() > 0) {
+                player.sendMessage("")
+
+                player.sendMessage("TRAITS".component.decorate(TextDecoration.UNDERLINED))
+
+                for ((trait, cause) in sessionPlayer.traits()) {
+                    player.sendMessage(Component.text {
+                        it.append(trait.settings.stylized)
+                        cause.getSimpleCauseMessage()?.let { causeMessage ->
+                            it.append(" [".component)
+                            it.append(causeMessage)
+                            it.append("]".component)
+                        }
+                    }.append(Component.text {
+                        it.append(" — ".component)
+                        it.append(trait.settings.descriptionProvider().component)
+                    }.color(Colors.LIGHT_GRAY.textColor)))
+                }
+            }
+
+//            player.sendMessage(Component.text("Clear chat with F3 + D").color(Colors.LIGHT_GRAY.textColor))
+//            player.sendMessage(Component.text("You can view your role at any point with /role").color(Colors.LIGHT_GRAY.textColor))
 
             player.sendMessage("")
-
-            player.sendMessage(Component.text("Clear chat with F3 + D").color(Colors.LIGHT_GRAY.textColor))
-            player.sendMessage(Component.text("You can view your role at any point with /role").color(Colors.LIGHT_GRAY.textColor))
 
             player.inventory.heldItemSlot = 8
 //            sessionPlayer.role.onRolePresented(this, sessionPlayer)
@@ -428,9 +464,10 @@ class Session(
 //        calculateEndGameText(reason)
 
         server.sendMessage(Component.empty())
-        for (line in endGameText!!) {
-            server.sendMessage(line)
-        }
+        server.sendMessage("placeholder".component)
+//        for (line in endGameText!!) {
+//            server.sendMessage(line)
+//        }
         server.sendMessage(Component.empty())
 
         for (player in server.onlinePlayers) {
@@ -448,7 +485,8 @@ class Session(
 
             player.sendTitlePart(
                 TitlePart.TITLE,
-                endGameTitle!!
+                "placeholder".component
+//                endGameTitle!!
             )
             player.sendTitlePart(
                 TitlePart.SUBTITLE,
@@ -620,8 +658,7 @@ class Session(
                 uniqueId = player.uniqueId,
                 name = player.name,
                 role = roleIfNotPresent,
-                server = server,
-                playerCommunicationManager = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY))
+                server = server
             )
 
             allPlayers[sessionPlayer.uniqueId] = sessionPlayer
@@ -775,11 +812,11 @@ class Session(
         return sessionPlayer.role
     }
 
-    var endGameText: List<TextComponent>? = null
-        private set
-
-    var endGameTitle: TextComponent? = null
-        private set
+//    var endGameText: List<TextComponent>? = null
+//        private set
+//
+//    var endGameTitle: TextComponent? = null
+//        private set
 
 //    fun calculateEndGameText(reason: EndGameReason) {
 //        val text = mutableListOf<TextComponent>()
@@ -1085,7 +1122,7 @@ class Session(
         val traitorWin = allPlayers.values.any { player ->
             player.isAlive
                 && player.role.settings.alignment.isTraitor
-                && player.traits.none { it.getWinCondition(this, player).isUnable }
+                && player.traits().none { (trait, cause) -> trait.getWinCondition(this, player).isUnable }
         }
 
         if (traitorWin) {
@@ -1095,7 +1132,7 @@ class Session(
         val survivorWin = allPlayers.values.any { player ->
             player.isAlive
                 && player.role.settings.alignment.isSurvivor
-                && player.traits.none { it.getWinCondition(this, player).isUnable }
+                && player.traits().none { (trait, cause) -> trait.getWinCondition(this, player).isUnable }
         }
 
         if (survivorWin) {
@@ -1105,7 +1142,7 @@ class Session(
         val neutralWin = allPlayers.values.any { player ->
             player.isAlive
                 && player.role.settings.alignment.isNeutral
-                && player.traits.none { it.getWinCondition(this, player).isUnableOrDefault }
+                && player.traits().none { (trait, cause) -> trait.getWinCondition(this, player).isUnableOrDefault }
         }
 
         if (neutralWin) {
@@ -1120,7 +1157,7 @@ class Session(
 
         val passiveWinners = allPlayers.values.filterTo(mutableSetOf()) { player ->
             var anyPassive = false
-            for (trait in player.traits) {
+            for ((trait, cause) in player.traits()) {
                 if (!player.isAlive && !trait.settings.canWinWhileDead) {
                     continue
                 }
@@ -1154,7 +1191,7 @@ class Session(
             isCancelled = false,
             willAnimate = false,
         )
-        for (trait in sessionPlayer.traits) {
+        for ((trait, cause) in sessionPlayer.traits()) {
             if (!sessionPlayer.isAlive && !trait.settings.activeWhileDead) {
                 continue
             }
@@ -1416,7 +1453,7 @@ class Session(
         val player = event.player
         val sessionPlayer = allPlayers[player.uniqueId] ?: return
 
-        sessionPlayer.onlineSessionPlayer!!.doOnlineActions()
+        sessionPlayer.onlineSessionPlayer!!.notifyOnline()
 
         if (!sessionPlayer.isAlive) {
             initDeadPlayer(player)

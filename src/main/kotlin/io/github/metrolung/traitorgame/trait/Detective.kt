@@ -27,7 +27,8 @@ class Detective : Trait {
             name = "Detective",
             traitColor = Colors.LAST_CHANCE,
             itemProvider = ItemBuilder(Material.BOOK),
-            builder = { LastChance() }
+            descriptionProvider = { "Detective description" },
+            provider = { Detective() }
         )
     }
 }

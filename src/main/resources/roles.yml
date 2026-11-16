@@ -1,4 +1,12 @@
 
 jester:
-  amount: 0
-  chance: 0%
+  amount: 1
+  chance: 100%
+
+mogul:
+  amount: 0..1
+  chance: 100%
+
+parasite:
+  amount: 0..1
+  chance: 100%

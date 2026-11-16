@@ -66,7 +66,8 @@ class LastChance(
             traitColor = Colors.LAST_CHANCE,
             stylized = Component.textOfChildren(MiniMessage.deserialize("<gradient:#88f0fc:#ccffff><b>Last chance!</b></gradient>")),
             itemProvider = ItemBuilder(Material.TOTEM_OF_UNDYING),
-            builder = { LastChance() }
+            descriptionProvider = { "Last chance description" },
+            provider = { LastChance() }
         )
     }
 }

@@ -8,15 +8,18 @@ import io.github.metrolung.traitorgame.commands.TraitorGameCommand
 import io.github.metrolung.traitorgame.commands.VoteCommand
 import io.github.metrolung.traitorgame.role.roles.Jester
 import io.github.metrolung.traitorgame.role.roles.Mogul
+import io.github.metrolung.traitorgame.role.roles.Parasite
 import io.github.metrolung.traitorgame.role.roles.Survivor
 import io.github.metrolung.traitorgame.role.roles.Traitor
 import io.github.metrolung.traitorgame.trait.Detective
 import io.github.metrolung.traitorgame.trait.LastChance
 import io.github.metrolung.traitorgame.trait.Pacifist
 import io.github.metrolung.traitorgame.trait.Sheriff
+import io.github.metrolung.traitorgame.trait.Trait
 import io.github.metrolung.traitorgame.trait.Victim
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
 import org.bukkit.NamespacedKey
+import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.plugin.java.JavaPlugin
 import java.io.File
 
@@ -35,13 +38,18 @@ class TraitorGamePlugin : JavaPlugin() {
     }
 
     override fun onEnable() {
-        TraitRegistry.setConfigurationFile(this, File(dataFolder, "traits.yaml"))
-        RoleRegistry.setConfigurationFile(this, File(dataFolder, "roles.yaml"))
+        saveResource("config.yml", false)
+        saveResource("roles.yml", false)
+        saveResource("traits.yml", false)
+
+        TraitRegistry.setConfigurationFile(this, File(dataFolder, "traits.yml"))
+        RoleRegistry.setConfigurationFile(this, File(dataFolder, "roles.yml"))
 
         Survivor.SETTINGS.register(RoleRegistry)
         Traitor.SETTINGS.register(RoleRegistry)
         Mogul.SETTINGS.register(RoleRegistry)
         Jester.SETTINGS.register(RoleRegistry)
+        Parasite.SETTINGS.register(RoleRegistry)
 
         Pacifist.SETTINGS.register(TraitRegistry)
         Sheriff.SETTINGS.register(TraitRegistry)
@@ -49,8 +57,15 @@ class TraitorGamePlugin : JavaPlugin() {
         Detective.SETTINGS.register(TraitRegistry)
         Victim.SETTINGS.register(TraitRegistry)
 
-        println("trait pool: " + generateSurvivorTraitPool(10))
-        println("role pool: " + generateRolePool(10, 2, 1, 1))
+        RoleRegistry.updateConfigs()
+        TraitRegistry.updateConfigs()
+
+        val traitSet = sortedSetOf<Trait>(Comparator { a, b ->
+            if (a.settings.priority == b.settings.priority) {
+                return@Comparator b.settings.key.compareTo(a.settings.key)
+            }
+            b.settings.priority.compareTo(a.settings.priority)
+        })
 
         this.lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
             event.registrar().register(TraitorGameCommand(this).create().build())

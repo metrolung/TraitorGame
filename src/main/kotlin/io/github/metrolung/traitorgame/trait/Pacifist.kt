@@ -1,13 +1,8 @@
 package io.github.metrolung.traitorgame.trait
 
 import io.github.metrolung.traitorgame.Colors
-import io.github.metrolung.traitorgame.OnlineSessionPlayer
-import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.TraitorGamePlugin
-import io.github.metrolung.traitorgame.trait.Detective.Companion.SETTINGS
 import org.bukkit.Material
-import org.bukkit.entity.Item
-import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.invui.item.ItemBuilder
 
 class Pacifist : Trait {
@@ -38,7 +33,8 @@ class Pacifist : Trait {
             name = "Pacifist",
             traitColor = Colors.LAST_CHANCE,
             itemProvider = ItemBuilder(Material.EMERALD),
-            builder = { LastChance() }
+            descriptionProvider = { "Pacifist Description" },
+            provider = { Pacifist() }
         )
     }
 }

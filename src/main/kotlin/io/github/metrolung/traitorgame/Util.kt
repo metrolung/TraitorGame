@@ -1,15 +1,20 @@
 package io.github.metrolung.traitorgame
 
 import io.papermc.paper.block.BlockPredicate.predicate
+import io.papermc.paper.datacomponent.DataComponentTypes
+import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.`object`.ObjectContents
 import org.bukkit.Location
+import org.bukkit.NamespacedKey
 import org.bukkit.OfflinePlayer
 import org.bukkit.attribute.Attribute
 import org.bukkit.entity.Player
 import org.bukkit.inventory.EquipmentSlot
+import org.bukkit.inventory.ItemStack
 import org.bukkit.scoreboard.Team
 import org.bukkit.util.Transformation
 import org.geysermc.floodgate.api.FloodgateApi

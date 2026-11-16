@@ -181,15 +181,15 @@ class TraitorGameCommand(private val plugin: TraitorGamePlugin) {
             return Command.SINGLE_SUCCESS
         }
 
-        val endGameText = oldSession.endGameText
-        if (endGameText == null) {
-            ctx.source.sender.sendPlainMessage("Could not retrieve end game message")
-            return Command.SINGLE_SUCCESS
-        }
-
-        for (line in endGameText) {
-            executor.sendMessage(line)
-        }
+//        val endGameText = oldSession.endGameText
+//        if (endGameText == null) {
+//            ctx.source.sender.sendPlainMessage("Could not retrieve end game message")
+//            return Command.SINGLE_SUCCESS
+//        }
+//
+//        for (line in endGameText) {
+//            executor.sendMessage(line)
+//        }
 
         return Command.SINGLE_SUCCESS
     }

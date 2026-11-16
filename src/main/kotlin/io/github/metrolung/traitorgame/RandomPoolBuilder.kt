@@ -5,7 +5,6 @@ import io.github.metrolung.traitorgame.role.RoleAlignment
 import io.github.metrolung.traitorgame.role.roles.Survivor
 import io.github.metrolung.traitorgame.role.roles.Traitor
 import io.github.metrolung.traitorgame.trait.Trait
-import org.bukkit.configuration.ConfigurationSection
 import org.checkerframework.common.returnsreceiver.qual.This
 import kotlin.random.Random
 
@@ -97,6 +96,9 @@ class RandomPoolBuilder<T>(
         @JvmStatic
         private fun <T> newPool(size: Int, samples: List<Sample<T>>, sampleGroups: Map<String, SampleGroup<T>>, random: Random = Random, default: () -> T): List<T> {
             val groups = sortedMapOf<SampleGroup<T>?, MutableList<() -> T>>(Comparator { p0, p1 ->
+                if (p0 == null && p1 == null)
+                    return@Comparator 0
+
                 if (p0 == null) {
                     return@Comparator 1
                 }
@@ -105,23 +107,32 @@ class RandomPoolBuilder<T>(
                     return@Comparator 0
                 }
 
+                if (p1.priority == p0.priority) {
+                    return@Comparator p0.hashCode().compareTo(p1.hashCode())
+                }
+
                 p1.priority.compareTo(p0.priority)
             })
+
+            for ((_, sampleGroup) in sampleGroups) {
+                groups[sampleGroup] = mutableListOf()
+            }
+
+            groups[null] = mutableListOf()
+
 
             for (sample in samples) {
                 val groupIdentifier = sampleGroups[sample.group]
 
-                if (!groups.containsKey(groupIdentifier)) {
-                    groups[groupIdentifier] = mutableListOf()
-                }
+                val list = groups[groupIdentifier] ?: continue
 
                 repeat(sample.minAmount) {
-                    groups[groupIdentifier]!!.add(sample.provider)
+                    list.add(sample.provider)
                 }
 
                 repeat(sample.maxAmount - sample.minAmount) {
-                    if (random.nextDouble() > sample.chance) {
-                        groups[groupIdentifier]!!.add(sample.provider)
+                    if (random.nextDouble() < sample.chance) {
+                        list.add(sample.provider)
                     }
                 }
             }
@@ -161,6 +172,26 @@ class RandomPoolBuilder<T>(
     }
 }
 
+private fun getRange(string: String?): IntRange? {
+    if (string == null) {
+        return null
+    }
+
+    val split = string.split("..")
+    if (split.size == 1) {
+        val max = split[0].toIntOrNull() ?: return null
+        return 0..max
+    }
+
+    if (split.size == 2) {
+        val min = split[0].toIntOrNull() ?: return null
+        val max = split[1].toIntOrNull() ?: return null
+        return min..max
+    }
+
+    return null
+}
+
 fun generateRolePool(playerCount: Int, traitorCount: Int, evilNeutralCount: Int, passiveNeutralCount: Int): List<Role> {
     val rolePool = RandomPoolBuilder<Role>(
         size = playerCount,
@@ -168,16 +199,10 @@ fun generateRolePool(playerCount: Int, traitorCount: Int, evilNeutralCount: Int,
     )
 
     rolePool.addSampleGroup(
-        "traitors",
+        "traitor",
         priority = 3.0,
         limit = traitorCount,
         groupDefault = { Traitor() }
-    )
-
-    rolePool.addSampleGroup(
-        "passiveNeutral",
-        priority = 2.0,
-        limit = passiveNeutralCount
     )
 
     rolePool.addSampleGroup(
@@ -187,18 +212,22 @@ fun generateRolePool(playerCount: Int, traitorCount: Int, evilNeutralCount: Int,
     )
 
     rolePool.addSampleGroup(
+        "passiveNeutral",
+        priority = 2.0,
+        limit = passiveNeutralCount
+    )
+
+    rolePool.addSampleGroup(
         "survivor",
         priority = 0.0
     )
 
     for ((roleSettings, configurationSection) in RoleRegistry.registered.values) {
         configurationSection.addDefault("chance", 100.0)
-        configurationSection.addDefault("min", 0.0)
-        configurationSection.addDefault("max", 0.0)
+        configurationSection.addDefault("amount", "0")
 
         val chance = (configurationSection.getDouble("chance")) / 100.0
-        val min = configurationSection.getInt("min")
-        val max = configurationSection.getInt("max")
+        val range = getRange(configurationSection.getString("amount")) ?: 0..0
 
         val group = when (roleSettings.alignment) {
             RoleAlignment.TRAITOR -> "traitor"
@@ -208,11 +237,11 @@ fun generateRolePool(playerCount: Int, traitorCount: Int, evilNeutralCount: Int,
         }
 
         rolePool.addSample(
-            maxAmount = max,
-            minAmount = min,
+            maxAmount = range.last,
+            minAmount = range.first,
             chance = chance,
             group = group,
-            provider = { roleSettings.builder.build(configurationSection) }
+            provider = { roleSettings.provider() }
         )
     }
 
@@ -227,18 +256,16 @@ fun generateSurvivorTraitPool(playerCount: Int): List<Trait?> {
 
     for ((traitSettings, configurationSection) in TraitRegistry.registered.values) {
         configurationSection.addDefault("chance", 100.0)
-        configurationSection.addDefault("min", 0.0)
-        configurationSection.addDefault("max", 0.0)
+        configurationSection.addDefault("amount", "0")
 
         val chance = (configurationSection.getDouble("chance")) / 100.0
-        val min = configurationSection.getInt("min")
-        val max = configurationSection.getInt("max")
+        val range = getRange(configurationSection.getString("amount")) ?: 0..0
 
         traitPool.addSample(
-            maxAmount = max,
-            minAmount = min,
+            maxAmount = range.last,
+            minAmount = range.first,
             chance = chance,
-            provider = { traitSettings.builder.build(configurationSection) }
+            provider = { traitSettings.provider() }
         )
     }
 
