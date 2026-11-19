@@ -3,6 +3,7 @@ package io.github.metrolung.traitorgame.trait
 import io.github.metrolung.traitorgame.Colors
 import io.github.metrolung.traitorgame.MiniMessage
 import io.github.metrolung.traitorgame.TraitorGamePlugin
+import io.github.metrolung.traitorgame.trait.event.TraitEvent
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.TitlePart
@@ -16,12 +17,16 @@ import java.time.Duration
 class LastChance(
     var used: Boolean = false
 ) : Trait {
-    override fun onTakeDamage(event: Trait.Event, damage: Trait.DamageInfo) {
-        if (!damage.isKilling) {
+    override fun onTakeDamage(event: TraitEvent.DamageEvent.Direct) {
+        if (used) {
             return
         }
 
-        if (damage.attackingPlayer != null) {
+        if (!event.isKilling) {
+            return
+        }
+
+        if (event.attackingPlayer != null) {
             return
         }
 

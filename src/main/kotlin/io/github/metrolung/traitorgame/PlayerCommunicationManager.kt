@@ -1,10 +1,13 @@
 package io.github.metrolung.traitorgame
 
+import io.papermc.paper.math.Position
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
+import org.bukkit.Location
 import org.bukkit.NamespacedKey
+import org.bukkit.entity.Entity
 
-class PlayerCommunicationManager(val divider: Component) {
+class ActionBar(val divider: Component = " | ".colored(Colors.LIGHT_GRAY)) {
     private var ticker = 0
     private val temporaryMessages: MutableList<Triple<Int, TextComponent, Boolean>> = mutableListOf()
     private val messages: MutableMap<NamespacedKey, Pair<TextComponent, Boolean>> = mutableMapOf()
@@ -22,7 +25,11 @@ class PlayerCommunicationManager(val divider: Component) {
             if (!data.second) data.first else null
         }
 
-        val allMessages = notImportant.subList(0, notImportant.size/2) + important + notImportant.subList(notImportant.size/2, notImportant.size)
+        val allMessages = buildList {
+            addAll(notImportant.subList(0, notImportant.size/2))
+            addAll(important)
+            addAll(notImportant.subList(notImportant.size/2, notImportant.size))
+        }
 
         if (allMessages.isEmpty()) {
             return "".component
@@ -37,17 +44,16 @@ class PlayerCommunicationManager(val divider: Component) {
         }
     }
 
-    fun tick(): TextComponent {
+    fun tick() {
         ticker++
         temporaryMessages.removeIf { (tick, text, important) -> ticker >= tick }
-        return getMessage()
     }
 
     fun sendTemporaryMessage(component: TextComponent, duration: Int, important: Boolean = true) {
         temporaryMessages.add(Triple(duration, component, important))
     }
 
-    fun sendMessage(key: NamespacedKey, message: TextComponent, important: Boolean = false) {
+    fun addMessage(key: NamespacedKey, message: TextComponent, important: Boolean = false) {
         messages[key] = message to important
     }
 
@@ -58,7 +64,32 @@ class PlayerCommunicationManager(val divider: Component) {
         }
     }
 
-    fun hideMessage(key: NamespacedKey) {
+    fun removeMessage(key: NamespacedKey) {
         messages.remove(key)
+    }
+}
+
+class Waypoints {
+    private var ticker = 0
+
+    var trackedEntities = mutableListOf<Entity>()
+    var trackedLocations = mutableListOf<Location>()
+
+    fun tick() {
+        ticker++
+//        temporaryMessages.removeIf { (tick, text, important) -> ticker >= tick }
+    }
+
+    fun getPacket() {
+
+    }
+}
+
+class PlayerCommunicationManager {
+    val actionBar = ActionBar()
+    val waypoints = Waypoints()
+
+    fun tick() {
+        actionBar.tick()
     }
 }

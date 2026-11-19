@@ -2,12 +2,9 @@ package io.github.metrolung.traitorgame
 
 import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.trait.Trait
-import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.`object`.ObjectContents
 import org.bukkit.Location
 import org.bukkit.Server
 import org.bukkit.entity.Player
-import org.bukkit.inventory.ItemType
 import java.util.*
 
 interface SessionPlayer {
@@ -21,7 +18,7 @@ interface SessionPlayer {
     var isAlive: Boolean
 
     val data: TypedDataHolder
-    val playerCommunicationManager: PlayerCommunicationManager// = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY))
+    val comms: PlayerCommunicationManager// = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY))
 
     val player: Player?
     val onlineSessionPlayer: OnlineSessionPlayer?
@@ -56,7 +53,7 @@ class SessionPlayerImpl(
     override var isAlive: Boolean = true
 
     override val data = TypedDataHolder()
-    override val playerCommunicationManager = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY))
+    override val comms = PlayerCommunicationManager()
     override val player: Player?
         get() = server.getPlayer(uniqueId)
 
@@ -117,71 +114,3 @@ class OnlineSessionPlayerImpl(val sessionPlayer: SessionPlayer, override val pla
         return action(this)
     }
 }
-
-//sealed class SessionPlayer(
-//    val uniqueId: UUID,
-//    val name: String,
-//    val role: Role,
-//    val server: Server,
-//) {
-//    private val _traits = sortedSetOf<Trait>(Comparator { a, b ->
-//        b.settings.priority.compareTo(a.settings.priority)
-//    })
-//    open val traits: Set<Trait>
-//        get() = _traits
-//
-//    private val traitCauses = mutableMapOf<Trait, Trait.TraitCause>()
-//
-//    val data = TypedDataHolder()
-//    val playerCommunicationManager = PlayerCommunicationManager(" | ".colored(Colors.LIGHT_GRAY))
-//
-//    var returnLocation: Location? = null
-//    var canReturn: Boolean = false
-//    var isAlive: Boolean = true
-//    var activeEntity: Entity? = null
-//
-//    open val player: Player?
-//        get() = server.getPlayer(uniqueId)
-//
-//    val onlineSessionPlayer: OnlineSessionPlayer?
-//        get() = player?.let { player -> OnlineSessionPlayer(this, player) }
-//
-//    val queuedActionsWhenOnline: MutableList<(OnlineSessionPlayer) -> Unit> = mutableListOf()
-//
-//    fun giveTrait(trait: Trait, cause: Trait.TraitCause? = null) {
-//        _traits.add(trait)
-//        if (cause != null) {
-//            traitCauses[trait] = cause
-//        }
-//    }
-//
-//    fun whenOnline(action: (OnlineSessionPlayer, Player) -> Unit) {
-//        val onlineSessionPlayer = onlineSessionPlayer
-//        if (onlineSessionPlayer == null) {
-//            queuedActionsWhenOnline.add({ sessionPlayer ->
-//                action(sessionPlayer, sessionPlayer.player)
-//            })
-//        } else {
-//            action(onlineSessionPlayer, onlineSessionPlayer.player)
-//        }
-//    }
-//
-//    fun whenOnline(action: (OnlineSessionPlayer) -> Unit) {
-//        val onlineSessionPlayer = onlineSessionPlayer
-//        if (onlineSessionPlayer == null) {
-//            queuedActionsWhenOnline.add(action)
-//        } else {
-//            action(onlineSessionPlayer)
-//        }
-//    }
-//}
-//
-//class OnlineSessionPlayer(val sessionPlayer: SessionPlayer, override val player: Player) : SessionPlayer(
-//    uniqueId = sessionPlayer.uniqueId,
-//    name = sessionPlayer.name,
-//    role = sessionPlayer.role,
-//    server = sessionPlayer.server
-//) {
-//    override val traits: Set<Trait>
-//        get() = sessionPlayer.traits
-//}

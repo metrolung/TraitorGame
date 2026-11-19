@@ -4,12 +4,13 @@ import io.github.metrolung.traitorgame.Colors
 import io.github.metrolung.traitorgame.ItemStacks
 import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.TraitorGamePlugin
+import io.github.metrolung.traitorgame.trait.event.TraitEvent
 import org.bukkit.Material
 import xyz.xenondevs.invui.item.ItemBuilder
 
 class Detective : Trait {
-    override fun onRolePresented(event: Trait.Event) {
-        event.player.player!!.give(ItemStacks.sampleChecker)
+    override fun onRolePresented(event: TraitEvent.RolePresentedEvent) {
+        event.player.player?.give(ItemStacks.sampleChecker)
     }
 
     sealed interface DNASample {

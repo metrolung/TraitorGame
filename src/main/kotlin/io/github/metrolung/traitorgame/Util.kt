@@ -12,6 +12,7 @@ import org.bukkit.Location
 import org.bukkit.NamespacedKey
 import org.bukkit.OfflinePlayer
 import org.bukkit.attribute.Attribute
+import org.bukkit.attribute.AttributeModifier
 import org.bukkit.entity.Player
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
@@ -99,6 +100,16 @@ fun Player.setNametagVisibility(shown: Boolean) {
         team.removePlayer(this)
     else
         team.addPlayer(this)
+}
+
+fun Player.setWaypointVisibility(shown: Boolean) {
+    val attribute = this.getAttribute(Attribute.WAYPOINT_TRANSMIT_RANGE)!!
+    val waypointIdentifier = TraitorGamePlugin.key("hide_waypoint")
+
+    attribute.removeModifier(waypointIdentifier)
+    if (!shown) {
+        attribute.addModifier(AttributeModifier(waypointIdentifier, -60_000_000.0, AttributeModifier.Operation.ADD_NUMBER))
+    }
 }
 
 inline fun Boolean.then(other: () -> Unit) {

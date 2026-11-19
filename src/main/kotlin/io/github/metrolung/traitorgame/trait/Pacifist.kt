@@ -2,19 +2,20 @@ package io.github.metrolung.traitorgame.trait
 
 import io.github.metrolung.traitorgame.Colors
 import io.github.metrolung.traitorgame.TraitorGamePlugin
+import io.github.metrolung.traitorgame.trait.event.TraitEvent
 import org.bukkit.Material
 import xyz.xenondevs.invui.item.ItemBuilder
 
 class Pacifist : Trait {
     var punishmentTime = 0
 
-    override fun onDealDamage(event: Trait.Event, damage: Trait.DamageInfo) {
-        if (damage.attackingPlayer != null) {
+    override fun onDealDamage(event: TraitEvent.DamageEvent.Direct) {
+        if (event.attackingPlayer != null) {
             punish()
         }
     }
 
-    override fun onTick(event: Trait.Event, tick: Int) {
+    override fun onTick(event: TraitEvent.TickEvent) {
         if (punishmentTime > 0) {
             punishmentTime--
         }

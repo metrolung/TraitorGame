@@ -1,19 +1,16 @@
 package io.github.metrolung.traitorgame.trait
 
-import io.github.metrolung.traitorgame.OnlineSessionPlayer
 import io.github.metrolung.traitorgame.ConfigurableItemRegistry
 import io.github.metrolung.traitorgame.Session
 import io.github.metrolung.traitorgame.SessionPlayer
 import io.github.metrolung.traitorgame.TraitRegistry
 import io.github.metrolung.traitorgame.colored
-import io.github.metrolung.traitorgame.component
 import io.github.metrolung.traitorgame.role.Role
+import io.github.metrolung.traitorgame.role.RoleAlignment
+import io.github.metrolung.traitorgame.trait.event.TraitEvent
 import net.kyori.adventure.text.TextComponent
 import org.bukkit.NamespacedKey
-import org.bukkit.block.Block
 import org.bukkit.configuration.ConfigurationSection
-import org.bukkit.entity.Entity
-import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.invui.item.ItemProvider
 
 interface Trait {
@@ -69,62 +66,44 @@ interface Trait {
 //    fun onMeetingEnd(session: Session, meeting: Meeting, sessionPlayer: SessionPlayer, turnout: Map<Vote, Int>) = Unit
 //
 
-    fun onRightClick(event: Event, itemStack: ItemStack?, block: Block?, entity: Entity?) = Unit
+    fun onInteract(event: TraitEvent.InteractionEvent) = Unit
 
-    fun onRolePresented(event: Event) = Unit
+    fun onRolePresented(event: TraitEvent.RolePresentedEvent) = Unit
 
-    fun onAnyDamageDealt(event: Event, damage: DamageInfo) = Unit
+    fun onAnyDamageDealt(event: TraitEvent.DamageEvent.Indirect) = Unit
+    fun onTakeDamage(event: TraitEvent.DamageEvent.Direct) = Unit
+    fun onDealDamage(event: TraitEvent.DamageEvent.Direct) = Unit
 
-    fun onTakeDamage(event: Event, damage: DamageInfo) = Unit
-    fun onDealDamage(event: Event, damage: DamageInfo) = Unit
-
-    fun onTick(event: Event, tick: Int) {}
+    fun onTick(event: TraitEvent.TickEvent) {}
 
     val settings: Settings
 
     interface TraitCause {
-        fun getSimpleCauseMessage(): TextComponent?
-
-        object Unspecified : TraitCause {
-            override fun getSimpleCauseMessage() = null
-        }
-        object AssignedToAll : TraitCause {
-            override fun getSimpleCauseMessage() = "Common".component
-        }
-        object RandomlyAssigned : TraitCause {
-            override fun getSimpleCauseMessage() = null
-        }
-        data class CausedByRole(val role: Role) : TraitCause {
-            override fun getSimpleCauseMessage() = role.settings.stylized
-        }
+        object Unspecified : TraitCause
+        object AssignedToAll : TraitCause
+        object RandomlyAssigned : TraitCause
+        data class CausedByRole(val role: Role) : TraitCause
+        data class CausedByAlignment(val alignment: RoleAlignment) : TraitCause
     }
 
-    class Event(
-        val session: Session,
-        val player: SessionPlayer,
-        var isHandled: Boolean = false,
-        var isCancelled: Boolean = false,
-        var willAnimate: Boolean = false,
-    ) {
-        fun handleAndCancel(doAnimation: Boolean = false) {
-            this.isHandled = true
-            this.isCancelled = true
-            this.willAnimate = doAnimation
-        }
-
-        fun handle(doAnimation: Boolean = false) {
-            this.isHandled = true
-            this.willAnimate = doAnimation
-        }
-    }
-
-    data class DamageInfo(
-        val victimPlayer: OnlineSessionPlayer?,
-        val victimEntity: Entity,
-        val attackingPlayer: OnlineSessionPlayer?,
-        val attackingEntity: Entity?,
-        val isKilling: Boolean,
-    )
+//    class Event(
+//        val session: Session,
+//        val player: SessionPlayer,
+//        var isHandled: Boolean = false,
+//        var isCancelled: Boolean = false,
+//        var willAnimate: Boolean = false,
+//    ) {
+//        fun handleAndCancel(doAnimation: Boolean = false) {
+//            this.isHandled = true
+//            this.isCancelled = true
+//            this.willAnimate = doAnimation
+//        }
+//
+//        fun handle(doAnimation: Boolean = false) {
+//            this.isHandled = true
+//            this.willAnimate = doAnimation
+//        }
+//    }
 
     data class Settings(
         val key: NamespacedKey,

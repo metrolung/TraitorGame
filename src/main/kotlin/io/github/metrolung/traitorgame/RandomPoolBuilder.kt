@@ -95,79 +95,86 @@ class RandomPoolBuilder<T>(
     companion object {
         @JvmStatic
         private fun <T> newPool(size: Int, samples: List<Sample<T>>, sampleGroups: Map<String, SampleGroup<T>>, random: Random = Random, default: () -> T): List<T> {
-            val groups = sortedMapOf<SampleGroup<T>?, MutableList<() -> T>>(Comparator { p0, p1 ->
-                if (p0 == null && p1 == null)
-                    return@Comparator 0
+            // Construct sample group that is associated with its contained samples
+            val associatedSampleGroup = sortedMapOf<SampleGroup<T>?, MutableList<() -> T>>(Comparator { p0, p1 ->
+                val priority0 = p0?.priority ?: Double.NEGATIVE_INFINITY
+                val priority1 = p1?.priority ?: Double.NEGATIVE_INFINITY
 
-                if (p0 == null) {
-                    return@Comparator 1
-                }
-
-                if (p1 == null) {
-                    return@Comparator 0
-                }
-
-                if (p1.priority == p0.priority) {
+                if (priority0 == priority1) {
                     return@Comparator p0.hashCode().compareTo(p1.hashCode())
                 }
 
-                p1.priority.compareTo(p0.priority)
+                priority1.compareTo(priority0)
             })
 
-            for ((_, sampleGroup) in sampleGroups) {
-                groups[sampleGroup] = mutableListOf()
+            // Add sample groups
+            associatedSampleGroup[null] = mutableListOf()
+            for (sampleGroup in sampleGroups.values) {
+                associatedSampleGroup[sampleGroup] = mutableListOf()
             }
 
-            groups[null] = mutableListOf()
+            // Add samples to each sample group association
+            for ((maxAmount, minAmount, chance, group, provider) in samples) {
+                val sampleGroup = sampleGroups[group]
+                val associatedSamples = associatedSampleGroup[sampleGroup] ?: associatedSampleGroup[null]!!
 
-
-            for (sample in samples) {
-                val groupIdentifier = sampleGroups[sample.group]
-
-                val list = groups[groupIdentifier] ?: continue
-
-                repeat(sample.minAmount) {
-                    list.add(sample.provider)
+                repeat(minAmount) {
+                    associatedSamples.add(provider)
                 }
 
-                repeat(sample.maxAmount - sample.minAmount) {
-                    if (random.nextDouble() < sample.chance) {
-                        list.add(sample.provider)
+                repeat(maxAmount - minAmount) {
+                    if (random.nextDouble() < chance) {
+                        associatedSamples.add(provider)
                     }
                 }
             }
 
-            val items = mutableListOf<T>()
-            outer@for ((group, groupSamples) in groups) {
-                groupSamples.shuffle(random)
-                group?.limit?.let { limit ->
-                    if (groupSamples.size > limit) {
-                        groupSamples.dropLast(groupSamples.size - limit)
-                    }
-                    if (groupSamples.size < limit && group.groupDefault != null) {
-                        repeat(limit - groupSamples.size) {
-                            groupSamples.add(group.groupDefault)
-                        }
-                    }
+            // Apply limits to each group
+            for ((sampleGroup, associatedSamples) in associatedSampleGroup) {
+                if (sampleGroup?.limit == null) {
+                    continue
                 }
 
-                for (provider in groupSamples) {
-                    if (items.size >= size) {
-                        break@outer
-                    }
-                    items.add(provider())
-                }
-            }
+                val limit: Int = sampleGroup.limit
 
-            if (items.size < size) {
-                repeat(size - items.size) {
-                    items.add(default())
+                if (associatedSamples.size > limit) {
+                    // Drop extra samples if there are too many in a group
+                    associatedSamples.shuffle(random)
+                    repeat(associatedSamples.size - limit) {
+                        associatedSamples.removeLast() // remove excess in a random order
+                    }
+                } else if ((associatedSamples.size < limit) && (sampleGroup.groupDefault != null)) {
+                    // Add defaults if group supports them
+                    repeat(limit - associatedSamples.size) {
+                        associatedSamples.add(sampleGroup.groupDefault)
+                    }
                 }
             }
 
-            items.shuffle()
+            // Construct all samples and add the items to resulting pool, breaking early if the resulting pool is the required size
+            val resultingPool = mutableListOf<T>()
 
-            return items
+            for (associatedSamples in associatedSampleGroup.values) {
+                for (sample in associatedSamples) {
+                    if (resultingPool.size >= size) {
+                        break
+                    }
+
+                    resultingPool.add(sample())
+                }
+            }
+
+            // Add extra default items in case it's short of the required size
+            if (resultingPool.size < size) {
+                repeat(size - resultingPool.size) {
+                    resultingPool.add(default())
+                }
+            }
+
+            // Randomize the resulting pool
+            resultingPool.shuffle(random)
+
+            return resultingPool
         }
     }
 }

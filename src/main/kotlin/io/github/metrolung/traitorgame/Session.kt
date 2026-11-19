@@ -8,6 +8,7 @@ import com.github.retrooper.packetevents.event.PacketSendEvent
 import com.github.retrooper.packetevents.protocol.packettype.PacketType
 import com.github.retrooper.packetevents.protocol.player.Equipment
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityEquipment
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerWaypoint
 import com.uchuhimo.collections.BiMap
 import com.uchuhimo.collections.MutableBiMap
 import com.uchuhimo.collections.mutableBiMapOf
@@ -19,19 +20,16 @@ import io.github.metrolung.traitorgame.api.Floodgate
 import io.github.metrolung.traitorgame.role.Role
 import io.github.metrolung.traitorgame.trait.LastChance
 import io.github.metrolung.traitorgame.trait.Trait
+import io.github.metrolung.traitorgame.trait.event.TraitEvent
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
-import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.datacomponent.item.ResolvableProfile
 import io.papermc.paper.event.entity.EntityEquipmentChangedEvent
 import io.papermc.paper.event.player.AsyncChatEvent
-import net.kyori.adventure.key.Key
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.event.HoverEvent
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
-import net.kyori.adventure.text.`object`.ObjectContents
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.TitlePart
@@ -54,7 +52,6 @@ import org.bukkit.event.Listener
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.event.entity.ItemMergeEvent
-import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerAdvancementDoneEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerDropItemEvent
@@ -63,7 +60,6 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
-import org.bukkit.inventory.ItemType
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
 import org.bukkit.potion.PotionEffect
@@ -280,10 +276,13 @@ class Session(
     fun initPlayer(sessionPlayer: OnlineSessionPlayer, tp: Boolean = true) {
         val player = sessionPlayer.player
 
+        sessionPlayer.player.waypointStyle
+
 //        updatePlayerList(player)
         player.resetStats()
 
         sessionPlayer.player.setNametagVisibility(false)
+        sessionPlayer.player.setWaypointVisibility(false)
 
         if (tp)
             circleBell(player, Random.nextDouble(-Math.PI, Math.PI), 4.0)
@@ -351,8 +350,6 @@ class Session(
             player.sendMessage(
                 Component.text {
                     it.append("You are: ".component)
-                    it.append((sessionPlayer.role.settings.itemProvider.get().getData(DataComponentTypes.ITEM_MODEL) ?: Key.key("item/golden_carrot")).asString().component)
-                    it.append(" ".component)
                     it.append(sessionPlayer.role.settings.stylized)
                     it.append(" [".component)
                     it.append(sessionPlayer.role.settings.alignment.stylized)
@@ -371,18 +368,23 @@ class Session(
 
                 player.sendMessage("TRAITS".component.decorate(TextDecoration.UNDERLINED))
 
+                var hasRoleTrait = false
                 for ((trait, cause) in sessionPlayer.traits()) {
                     player.sendMessage(Component.text {
                         it.append(trait.settings.stylized)
-                        cause.getSimpleCauseMessage()?.let { causeMessage ->
-                            it.append(" [".component)
-                            it.append(causeMessage)
-                            it.append("]".component)
+                        if (cause is Trait.TraitCause.CausedByRole || cause is Trait.TraitCause.CausedByAlignment) {
+                            hasRoleTrait = true
+                            it.append("*".colored(sessionPlayer.role.settings.roleColor))
                         }
                     }.append(Component.text {
                         it.append(" — ".component)
                         it.append(trait.settings.descriptionProvider().component)
                     }.color(Colors.LIGHT_GRAY.textColor)))
+                }
+
+                if (hasRoleTrait) {
+                    player.sendMessage("")
+                    player.sendMessage("* given by your role".colored(sessionPlayer.role.settings.roleColor).decorate(TextDecoration.ITALIC))
                 }
             }
 
@@ -392,7 +394,10 @@ class Session(
             player.sendMessage("")
 
             player.inventory.heldItemSlot = 8
-//            sessionPlayer.role.onRolePresented(this, sessionPlayer)
+            doTraitEvent(TraitEvent.RolePresentedEvent(
+                this,
+                sessionPlayer
+            ), Trait::onRolePresented)
         }, 60L)
     }
 
@@ -605,7 +610,8 @@ class Session(
 //        )
     }
 
-    fun handlePlayerDeath(playerUuid: UUID, drops: MutableList<ItemStack>, causeOfDeath: String, contaminators: MutableMap<UUID, SessionPlayer>) {
+    fun handlePlayerDeath(player: SessionPlayer, drops: MutableList<ItemStack>, causeOfDeath: String, contaminators: MutableMap<UUID, SessionPlayer>) {
+        player.isAlive = false
 //        val deadPlayer = alivePlayers.remove(playerUuid)
 //        if (alivePlayers.isEmpty()) {
 //            manager.endSession()
@@ -632,23 +638,19 @@ class Session(
 //        }
     }
 
-    fun handlePlayerDeath(player: SessionPlayer, drops: MutableList<ItemStack>, causeOfDeath: String, contaminators: MutableMap<UUID, SessionPlayer>) {
-        handlePlayerDeath(player.uniqueId, drops, causeOfDeath, contaminators)
-    }
-
     private fun initDeadPlayer(player: Player) {
         player.gameMode = GameMode.SPECTATOR
     }
 
-    private fun qualifiesForLastChance(event: PlayerDeathEvent): Boolean {
-        val damage = event.player.lastDamageCause ?: return false
-
-        if (damage.damageSource.directEntity is Player) {
-            return false
-        }
-
-        return !event.player.combatTracker.isInCombat
-    }
+//    private fun qualifiesForLastChance(event: PlayerDeathEvent): Boolean {
+//        val damage = event.player.lastDamageCause ?: return false
+//
+//        if (damage.damageSource.directEntity is Player) {
+//            return false
+//        }
+//
+//        return !event.player.combatTracker.isInCombat
+//    }
 
     fun revive(player: Player, roleIfNotPresent: Role): String {
         val sessionPlayer = allPlayers[player.uniqueId]
@@ -1034,13 +1036,15 @@ class Session(
         val pistonBlockData = server.createBlockData(Material.MOVING_PISTON)
         settings.bellLocation.getWorld().setBlockData(settings.bellLocation, pistonBlockData)
 
-        doTraitEventOnAll { trait, event ->
-            trait.onTick(event, tickNumber)
-        }
-
         forAllPlayers { player ->
-            val message = player.playerCommunicationManager.tick()
-            player.player?.sendActionBar(message)
+            doTraitEvent(TraitEvent.TickEvent(
+                this,
+                player,
+                tickNumber
+            ), Trait::onTick)
+
+            player.comms.tick()
+            player.player?.sendActionBar(player.comms.actionBar.getMessage())
         }
 
         updateBell()
@@ -1183,32 +1187,19 @@ class Session(
         )
     }
 
-    fun doTraitEvent(sessionPlayer: SessionPlayer, callback: (Trait, Trait.Event) -> Unit): Trait.Event {
-        val event = Trait.Event(
-            session = this,
-            player = sessionPlayer,
-            isHandled = false,
-            isCancelled = false,
-            willAnimate = false,
-        )
-        for ((trait, cause) in sessionPlayer.traits()) {
-            if (!sessionPlayer.isAlive && !trait.settings.activeWhileDead) {
+    fun <T: TraitEvent> doTraitEvent(event: T, callback: Trait.(T) -> Unit): T {
+        for ((trait, cause) in event.player.traits()) {
+            if (!event.player.isAlive && !trait.settings.activeWhileDead) {
                 continue
             }
 
             callback(trait, event)
 
-            if (event.isHandled) {
+            if (event is TraitEvent.Handleable && event.isHandled) {
                 return event
             }
         }
         return event
-    }
-
-    fun doTraitEventOnAll(callback: (Trait, Trait.Event) -> Unit) {
-        for ((_, player) in allPlayers) {
-            doTraitEvent(player, callback)
-        }
     }
 
     fun forAllPlayers(callback: (SessionPlayer) -> Unit) {
@@ -1247,71 +1238,117 @@ class Session(
                 event.markForReEncode(true)
             }
         }
+        if (event.packetType == PacketType.Play.Server.WAYPOINT) {
+            val wrapper = WrapperPlayServerWaypoint(event)
+//            wrapper.
+//
+//            event.markForReEncode(true)
+        }
     }
 
     @EventHandler
     fun onEntityDamage(event: EntityDamageEvent) {
         val attackingEntity = event.damageSource.causingEntity
-        val attackingPlayer = allPlayers[attackingEntity?.uniqueId]
+        val attackingPlayer = allPlayers[attackingEntity?.uniqueId]?.onlineSessionPlayer
 
         val victimEntity = event.entity
-        val victimPlayer = allPlayers[victimEntity.uniqueId]
-
-        val damageInfo = Trait.DamageInfo(
-            isKilling = false,
-            victimPlayer = victimPlayer?.onlineSessionPlayer,
-            victimEntity = victimEntity,
-            attackingPlayer = attackingPlayer?.onlineSessionPlayer,
-            attackingEntity = attackingEntity
-        )
+        val victimPlayer = allPlayers[victimEntity.uniqueId]?.onlineSessionPlayer
 
         if (victimPlayer != null) {
-            doTraitEvent(victimPlayer) { trait, event ->
-                trait.onTakeDamage(event, damageInfo)
-            }.isHandled.then { return }
+            val result = doTraitEvent(TraitEvent.DamageEvent.Direct(
+                session = this,
+                player = victimPlayer,
+                attackingPlayer = attackingPlayer,
+                victimPlayer = victimPlayer,
+                attackingEntity = attackingEntity,
+                victimEntity = victimEntity,
+                isKilling = false
+            ), Trait::onTakeDamage)
+
+            if (result.isCancelled) event.isCancelled = true
+            if (result.isHandled) return
         }
 
         if (attackingPlayer != null) {
-            doTraitEvent(attackingPlayer) { trait, event ->
-                trait.onDealDamage(event, damageInfo)
-            }.isHandled.then { return }
+            val result = doTraitEvent(TraitEvent.DamageEvent.Direct(
+                session = this,
+                player = attackingPlayer,
+                attackingPlayer = attackingPlayer,
+                victimPlayer = victimPlayer,
+                attackingEntity = attackingEntity,
+                victimEntity = victimEntity,
+                isKilling = false
+            ), Trait::onDealDamage)
+
+            if (result.isCancelled) event.isCancelled = true
+            if (result.isHandled) return
         }
 
-        doTraitEventOnAll { trait, event ->
-            trait.onAnyDamageDealt(event, damageInfo)
+        forAllPlayers { player ->
+            doTraitEvent(TraitEvent.DamageEvent.Indirect(
+                session = this,
+                player = player,
+                attackingPlayer = attackingPlayer,
+                victimPlayer = victimPlayer,
+                attackingEntity = attackingEntity,
+                victimEntity = victimEntity,
+                isKilling = false
+            ), Trait::onAnyDamageDealt)
         }
     }
 
     @EventHandler
     fun onEntityDeath(event: EntityDeathEvent) {
         val attackingEntity = event.damageSource.causingEntity
-        val attackingPlayer = allPlayers[attackingEntity?.uniqueId]
+        val attackingPlayer = allPlayers[attackingEntity?.uniqueId]?.onlineSessionPlayer
 
         val victimEntity = event.entity
-        val victimPlayer = allPlayers[victimEntity.uniqueId]
-
-        val damageInfo = Trait.DamageInfo(
-            isKilling = true,
-            victimPlayer = victimPlayer?.onlineSessionPlayer,
-            victimEntity = victimEntity,
-            attackingPlayer = attackingPlayer?.onlineSessionPlayer,
-            attackingEntity = attackingEntity
-        )
+        val victimPlayer = allPlayers[victimEntity.uniqueId]?.onlineSessionPlayer
 
         if (victimPlayer != null) {
-            doTraitEvent(victimPlayer) { trait, event ->
-                trait.onTakeDamage(event, damageInfo)
-            }.isHandled.then { return }
+            val result = doTraitEvent(TraitEvent.DamageEvent.Direct(
+                session = this,
+                player = victimPlayer,
+                attackingPlayer = attackingPlayer,
+                victimPlayer = victimPlayer,
+                attackingEntity = attackingEntity,
+                victimEntity = victimEntity,
+                isKilling = true
+            ), Trait::onTakeDamage)
+
+            if (result.isCancelled) event.isCancelled = true
+            if (result.isHandled) return
         }
 
         if (attackingPlayer != null) {
-            doTraitEvent(attackingPlayer) { trait, event ->
-                trait.onDealDamage(event, damageInfo)
-            }.isHandled.then { return }
+            val result = doTraitEvent(TraitEvent.DamageEvent.Direct(
+                session = this,
+                player = attackingPlayer,
+                attackingPlayer = attackingPlayer,
+                victimPlayer = victimPlayer,
+                attackingEntity = attackingEntity,
+                victimEntity = victimEntity,
+                isKilling = true
+            ), Trait::onDealDamage)
+
+            if (result.isCancelled) event.isCancelled = true
+            if (result.isHandled) return
         }
 
-        doTraitEventOnAll { trait, event ->
-            trait.onAnyDamageDealt(event, damageInfo)
+        forAllPlayers { player ->
+            doTraitEvent(TraitEvent.DamageEvent.Indirect(
+                session = this,
+                player = player,
+                attackingPlayer = attackingPlayer,
+                victimPlayer = victimPlayer,
+                attackingEntity = attackingEntity,
+                victimEntity = victimEntity,
+                isKilling = true
+            ), Trait::onAnyDamageDealt)
+        }
+
+        if (victimPlayer != null) {
+            handlePlayerDeath(victimPlayer, event.drops, "Cause of death", mutableMapOf())
         }
     }
 
@@ -1403,9 +1440,9 @@ class Session(
                 }
             }
             if (anyHidden) {
-                sessionPlayer.playerCommunicationManager.sendMessage(TraitorGamePlugin.key("obscured_item"), "Item obscured".component, important = false)
+                sessionPlayer.comms.actionBar.addMessage(TraitorGamePlugin.key("obscured_item"), "Item obscured".component, important = false)
             } else {
-                sessionPlayer.playerCommunicationManager.hideMessage(TraitorGamePlugin.key("obscured_item"))
+                sessionPlayer.comms.actionBar.removeMessage(TraitorGamePlugin.key("obscured_item"))
             }
         }
     }
@@ -1506,10 +1543,10 @@ class Session(
 
 
     @EventHandler
-    fun onPlayerInteractEntity(outerEvent: PlayerInteractEntityEvent) {
-        val player = outerEvent.player
+    fun onPlayerInteractEntity(event: PlayerInteractEntityEvent) {
+        val player = event.player
 
-        val passthrough = outerEvent.rightClicked.persistentDataContainer.get(INTERACTION_PASSTHROUGH_KEY, PersistentDataType.STRING)
+        val passthrough = event.rightClicked.persistentDataContainer.get(INTERACTION_PASSTHROUGH_KEY, PersistentDataType.STRING)
         if (passthrough != null) {
             val entity = player.server.getEntity(UUID.fromString(passthrough))
 
@@ -1517,30 +1554,29 @@ class Session(
                 val passthroughEvent = PlayerInteractEntityEvent(
                     player,
                     entity,
-                    outerEvent.hand
+                    event.hand
                 )
                 player.server.pluginManager.callEvent(passthroughEvent)
-                outerEvent.isCancelled = passthroughEvent.isCancelled
+                event.isCancelled = passthroughEvent.isCancelled
 
                 return
             }
         }
 
-        val sessionPlayer = allPlayers[player.uniqueId] ?: return
+        val sessionPlayer = allPlayers[player.uniqueId]?.onlineSessionPlayer ?: return
+        val clickedSessionPlayer = allPlayers[event.rightClicked.uniqueId]?.onlineSessionPlayer
 
-        val event = doTraitEvent(sessionPlayer) { trait, event ->
-            trait.onRightClick(
-                event,
-                itemStack = player.inventory.getItem(outerEvent.hand),
-                block = null,
-                entity = outerEvent.rightClicked
-            )
-        }
+        val result = doTraitEvent(TraitEvent.InteractionEvent(
+            session = this,
+            player = sessionPlayer,
+            itemStack = player.inventory.getItem(event.hand),
+            block = null,
+            entity = event.rightClicked,
+            clickedPlayer = clickedSessionPlayer
+        ), Trait::onInteract)
 
-        outerEvent.isCancelled = event.isCancelled
-        if (event.willAnimate) {
-            outerEvent.player.swingHand(outerEvent.hand)
-        }
+        if (result.isCancelled) event.isCancelled = true
+        if (result.isAnimated) event.player.swingHand(event.hand ?: EquipmentSlot.HAND)
     }
 
     @EventHandler
@@ -1551,25 +1587,23 @@ class Session(
     }
 
     @EventHandler
-    fun onPlayerInteract(outerEvent: PlayerInteractEvent) {
-        if (!outerEvent.action.isRightClick) {
+    fun onPlayerInteract(event: PlayerInteractEvent) {
+        if (!event.action.isRightClick) {
             return
         }
 
-        val sessionPlayer = allPlayers[outerEvent.player.uniqueId] ?: return
+        val sessionPlayer = allPlayers[event.player.uniqueId]?.onlineSessionPlayer ?: return
 
-        val event = doTraitEvent(sessionPlayer) { trait, event ->
-            trait.onRightClick(
-                event,
-                itemStack = outerEvent.item,
-                block = outerEvent.clickedBlock,
-                entity = null
-            )
-        }
+        val result = doTraitEvent(TraitEvent.InteractionEvent(
+            session = this,
+            player = sessionPlayer,
+            itemStack = event.item,
+            block = event.clickedBlock,
+            entity = null,
+            clickedPlayer = null
+        ), Trait::onInteract)
 
-        outerEvent.isCancelled = event.isCancelled
-        if (event.willAnimate) {
-            outerEvent.player.swingHand(outerEvent.hand ?: EquipmentSlot.HAND)
-        }
+        if (result.isCancelled) event.isCancelled = true
+        if (result.isAnimated) event.player.swingHand(event.hand ?: EquipmentSlot.HAND)
     }
 }

@@ -3,14 +3,12 @@ package io.github.metrolung.traitorgame.trait
 import io.github.metrolung.traitorgame.Colors
 import io.github.metrolung.traitorgame.ItemStacks
 import io.github.metrolung.traitorgame.TraitorGamePlugin
+import io.github.metrolung.traitorgame.trait.event.TraitEvent
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.invui.item.ItemBuilder
 
 class Intel : Trait {
-    override fun onRolePresented(event: Trait.Event) {
-    }
-
     override val settings: Trait.Settings
         get() = SETTINGS
 
